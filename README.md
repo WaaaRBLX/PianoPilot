@@ -1,0 +1,93 @@
+# PianoPilot
+
+PianoPilot plays songs on Roblox pianos for you. Add an MP3 or a MIDI file, press Play, click into Roblox, and it plays the song on the piano you're sitting at. It runs on Windows, and it's free and open source.
+
+![PianoPilot playing Bach's Prelude in C, with the song map and the live keyboard](docs/song-page.png)
+
+**[Download PianoPilot 0.8 (beta)](https://github.com/WaaaRBLX/PianoPilot/releases/latest)**: unzip it anywhere and double-click `PianoPilot.exe`.
+
+This is a beta: everything works and has been tested, but the full test pass in Roblox piano games is still going on. Version 1.0 comes after that.
+
+## What it does
+
+- **Plays any song on a Roblox piano.** It presses the same keys you would, with accurate timing, including black keys, chords and the sustain pedal.
+- **Turns MP3s and videos into songs.** Drop in a recording of piano music and it writes out the notes for you (piano-only recordings work best).
+- **Takes MIDI files and text sheets** like `[tu] y o | p` as they are.
+- **Best for this song.** One click picks the settings that suit the song (how it fits on the 61 keys, pedal, tracks, chord size, note length) and says what it changed. New songs get this automatically.
+- **Plays like a person if you want.** Perfect, Pro, Casual or Beginner add human timing and a few mistakes.
+- **Speed, loops, a queue, favorites** and a small mini player that stays on top of Roblox.
+- **Never types into the wrong window.** Click out of Roblox and it pauses; click back in and it carries on.
+- **A calibration test** checks how your piano handles black keys, fast notes and the pedal, and fixes the settings for you.
+
+## Getting started
+
+1. **You need Python** (free). If it isn't on your PC, `PianoPilot.exe` offers to open the download page. Any Python from 3.9 on works.
+2. **Download** the zip from the [Releases page](https://github.com/WaaaRBLX/PianoPilot/releases/latest), unzip it (your Downloads folder is fine) and double-click `PianoPilot.exe`.
+   The first time, Windows may say "Windows protected your PC", because the app isn't signed by a known publisher. Click **More info**, then **Run anyway**. `PianoPilot.exe` is a tiny starter that runs `pianopilot.py` with your Python; its source is in [`launcher/`](launcher).
+3. **Follow the welcome:** sit at a piano in Roblox, close the chat box, run the calibration test, add a song, press Play and click into the Roblox window.
+
+<p align="center"><img src="docs/add-a-song.png" alt="The Add a song window: drop any file in" width="560"></p>
+
+### Turning MP3s into songs
+
+The first time you add an MP3, PianoPilot sets this up with one click:
+
+- It needs the piano model file, [`PianoModel.pianoscribe`](https://downloads.justagwas.com/pianoscribe/PianoModel.pianoscribe), in your Downloads folder.
+- It downloads about 150 MB of libraries (NumPy, SciPy, ONNX Runtime). It uses your graphics card when it can.
+- If your Python is too new for those libraries, a **Use Python 3.13** button installs a second Python just for this.
+
+### Hotkeys
+
+These work while Roblox is in front. You can change them in Settings.
+
+| Key | Does |
+| --- | --- |
+| F6 | Play and pause |
+| F7 | Stop |
+| Home | Back to the start |
+| Page Down / Page Up | Slower / faster |
+| End | Next song in the queue |
+
+### If something sounds off
+
+Run the calibration test (Settings) first, then press **Best for this song**. The app's Help (bottom left, or press `?`) has fixes for the common problems: black keys sounding like white keys, the camera flipping (turn off Shift Lock Switch in Roblox), and Roblox running as administrator.
+
+## Play fair
+
+PianoPilot is an autoplayer: it presses keys on your keyboard for you, and only while the Roblox window is in front. It doesn't touch the game itself: nothing is injected, no memory is read, no game files are changed. Some games and competitions don't allow autoplayers, so follow each game's rules, and don't pass it off as your own playing in contests.
+
+## A note from Waaa
+
+<img src="docs/welcome.png" alt="The welcome window, with this note at the bottom" width="380" align="right">
+
+Hi there,
+
+PianoPilot started as a random idea and turned into a passion project. The goal was to test what AI can do: nearly everything here, the code, the design and the testing, was made by an AI (Claude, by Anthropic), while I steered it and tried each version on real Roblox pianos.
+
+It's free and open source, and there's no harm meant by it. It just plays music. If anyone asks you to pay for it, it didn't come from me.
+
+It also stands on other people's open-source work: turning MP3s into songs uses the Pianoscribe engine by Justagwas and the TransKun piano model by Yujia Yan. Thank you to both.
+
+Have fun,
+**Waaa**
+
+<br clear="right">
+
+## Credits
+
+- Audio import uses the transcription engine from [Pianoscribe](https://github.com/Justagwas/Pianoscribe) by Justagwas (GPL-3.0). See [`engine/pianoscribe_engine`](engine/pianoscribe_engine) for what was copied and what was written for PianoPilot.
+- The piano model is [TransKun](https://github.com/Yujia-Yan/Transkun) by Yujia Yan (MIT).
+- Fonts: Instrument Sans and Instrument Serif (SIL Open Font License), in [`ui/fonts`](ui/fonts).
+- The example songs are public domain: Beethoven's Für Elise (opening) and Bach's Prelude in C (opening), entered note by note.
+- Built with [Claude](https://claude.ai) by Anthropic.
+
+## For tinkerers
+
+- PianoPilot is plain Python with no extra packages (MP3 import installs its own when you set it up). `python pianopilot.py` starts it, and `Start PianoPilot.bat` does the same with a command window that shows what's going on.
+- `python piano_player.py song.mid` plays a song from the command line. Add `--help` to see the options; it also plays text sheets.
+- `PianoPilot.exe` is built from [`launcher/launcher.c`](launcher/launcher.c) with clang and LLVM's Windows tools (`sh launcher/build.sh`).
+- Your settings, log and the installed model live in `data/`, and your songs in `Songs/`. Both are created on first run and are never part of the repository.
+
+## License
+
+GPL-3.0. See [LICENSE](LICENSE). You can use, change and share PianoPilot, as long as what you share stays open source under the same license and keeps the credits.

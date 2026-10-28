@@ -1,0 +1,2193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PianoPilot</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2317121F'/%3E%3Crect x='6' y='7' width='6' height='18' rx='1.5' fill='%23EEE6D3'/%3E%3Crect x='13' y='7' width='6' height='18' rx='1.5' fill='%23EEE6D3'/%3E%3Crect x='20' y='7' width='6' height='18' rx='1.5' fill='%23EEE6D3'/%3E%3Crect x='10' y='7' width='4' height='11' rx='1' fill='%23D3A54A'/%3E%3Crect x='17.5' y='7' width='4' height='11' rx='1' fill='%23D3A54A'/%3E%3C/svg%3E">
+<style>
+@font-face { font-family: "Instrument Sans"; src: url("/fonts/InstrumentSans.ttf") format("truetype"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: "Instrument Serif"; src: url("/fonts/InstrumentSerif.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+:root {
+  --bg: #17121F;          /* lacquered plum-black */
+  --panel: #1F1829;
+  --raised: #2A2236;
+  --line: #3A3048;
+  --well: #120E18;
+  --ivory: #EEE6D3;       /* white keys */
+  --ivory-2: #BDB3A3;
+  --quiet: #918799;
+  --brass: #D3A54A;       /* pedals */
+  --brass-hi: #E6BE68;
+  --brass-ink: #241A0A;
+  --rose: #E08A8A;
+  --sans: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --serif: "Instrument Serif", "Georgia", serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ivory); font: 15px/1.45 var(--sans);
+  display: grid; grid-template-columns: minmax(280px, 340px) 1fr; overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- library ---------- */
+.library { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 20px 20px 14px; }
+.brand svg { flex: none; }
+.brand h1 { margin: 0; font: 400 26px/1 var(--serif); letter-spacing: .01em; }
+.search { padding: 0 16px 12px; display: flex; gap: 8px; }
+.search input { flex: 1; min-width: 0; }
+.search input {
+  width: 100%; height: 38px; padding: 0 12px 0 36px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--well) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23918799' stroke-width='1.6'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E") no-repeat 12px 50%;
+}
+.search input::placeholder { color: var(--quiet); }
+.lib-actions { display: flex; gap: 8px; padding: 0 16px 14px; }
+.btn {
+  height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--line); background: var(--raised);
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; transition: background .12s, border-color .12s;
+}
+.btn:hover { background: #352B43; border-color: #4A3F5A; }
+.btn.primary { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); font-weight: 600; }
+.btn.primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
+.btn.icon { width: 36px; padding: 0; justify-content: center; }
+.btn:disabled { opacity: .45; cursor: default; }
+.lib-actions .btn.primary { flex: 1; justify-content: center; gap: 6px; }
+
+.jobs { padding: 0 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }   /* long names can't widen the cards */
+.jobs:not(:empty) { padding-bottom: 12px; }
+.job { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--well); }
+.job-top { display: flex; align-items: center; gap: 8px; }
+.job-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.job-text { color: var(--ivory-2); font-size: 13px; margin-top: 2px; }
+.job.error .job-text { color: var(--rose); }
+.job.done .job-text { color: var(--brass); }
+.bar { height: 4px; border-radius: 2px; background: var(--line); margin-top: 8px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--brass); width: 0; transition: width .3s; }
+.bar.indeterminate > i { width: 30%; animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+.link-btn { background: none; border: 0; padding: 2px 4px; color: var(--quiet); font-size: 13px; border-radius: 6px; }
+.link-btn:hover { color: var(--ivory); }
+
+.menu-wrap { position: relative; }
+.menu { position: absolute; right: 0; top: 42px; z-index: 20; min-width: 250px; padding: 6px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--raised); box-shadow: 0 12px 30px rgba(0,0,0,.35); display: grid; gap: 2px; }
+.menu button { text-align: left; border: 0; background: none; padding: 9px 12px; border-radius: 8px; }
+.menu button:hover, .menu button:focus-visible { background: #352B43; }
+.sheet-text { width: 100%; min-height: 150px; resize: vertical; border-radius: 10px; border: 1px solid var(--line); background: var(--well);
+  padding: 10px 12px; font: 14px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ivory); }
+.field { display: grid; gap: 6px; margin-bottom: 12px; }
+.field > span { color: var(--ivory-2); font-size: 14px; }
+.text-in { height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--well); }
+.mini-map { display: block; width: 100%; height: 70px; border-radius: 10px; background: var(--well); border: 1px solid var(--line); margin-top: 8px; }
+details.details { margin-top: 14px; }
+details.details summary { cursor: pointer; color: var(--ivory-2); }
+details.details summary:hover { color: var(--ivory); }
+.detail-grid { display: grid; grid-template-columns: 140px 1fr; gap: 6px 16px; margin: 12px 0 10px; }
+.detail-grid dt { color: var(--quiet); }
+.detail-grid dd { margin: 0; }
+.cal-part { border: 1px solid var(--line); border-radius: 12px; background: var(--well); padding: 14px 16px; margin: 10px 0 16px; }
+.cal-part h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.cal-part p { margin: 0; color: var(--ivory-2); }
+.cal-progress { color: var(--quiet); font-size: 13px; }
+.cal-msg { margin: 10px 0 0; color: var(--brass-hi) !important; }
+.cal-msg:empty, .cal-status:empty { display: none; }
+.cal-status { margin: 10px 0 0; color: var(--quiet) !important; font-size: 13px; }
+.tabbar { display: flex; align-items: center; gap: 4px; padding: 0 16px 8px; }
+.tab { height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--ivory-2); }
+.tab:hover { color: var(--ivory); background: var(--raised); }
+.tab[aria-selected="true"] { color: var(--ivory); background: var(--raised); box-shadow: inset 0 -2px 0 var(--brass); }
+.tab .n { color: var(--quiet); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.sortpick { flex: none; width: 104px; height: 38px; font-size: 13px; padding: 0 26px 0 10px; background-position: right 8px center; }
+.queue-bar { display: flex; gap: 8px; padding: 0 16px 8px; align-items: center; color: var(--quiet); font-size: 13px; }
+.queue-bar .link-btn { color: var(--ivory-2); }
+.songs { list-style: none; margin: 0; padding: 0 8px 8px; overflow-y: auto; flex: 1; min-height: 0; }
+.songs > li { position: relative; }
+.row-tools { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); display: none; gap: 2px; }
+.songs > li:hover .row-tools, .songs > li:focus-within .row-tools { display: flex; }
+.tool { width: 28px; height: 28px; border-radius: 7px; border: 0; background: var(--panel); color: var(--ivory-2); display: grid; place-items: center; }
+.tool:hover { background: var(--line); color: var(--ivory); }
+.tool[aria-pressed="true"] { color: var(--brass); }
+.star { color: var(--brass); }
+.qnum { display: inline-block; min-width: 20px; color: var(--quiet); font-variant-numeric: tabular-nums; }
+.songs::-webkit-scrollbar { width: 10px; }
+.songs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 3px solid var(--panel); }
+.song {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; width: 100%;
+  text-align: left; padding: 9px 12px 9px 14px; border: 0; border-radius: 9px; background: none; position: relative;
+}
+.song:hover { background: var(--raised); }
+.song[aria-current="true"] { background: var(--raised); }
+.song[aria-current="true"]::before { content: ""; position: absolute; left: 3px; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--brass); }
+.song-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.song-sub { grid-column: 1; color: var(--quiet); font-size: 13px; display: flex; gap: 10px; }
+.song-sub .bad { color: var(--rose); }
+.meter { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 3px; align-items: flex-end; height: 18px; }
+.meter i { width: 4px; border-radius: 1px; background: var(--line); }
+.meter i:nth-child(1) { height: 6px; } .meter i:nth-child(2) { height: 10px; }
+.meter i:nth-child(3) { height: 14px; } .meter i:nth-child(4) { height: 18px; }
+.meter i.on { background: var(--brass); }
+.playing-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--brass); margin-right: 7px; vertical-align: 1px; }
+.lib-foot { padding: 10px 14px 14px 20px; color: var(--quiet); font-size: 13px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2px 8px; }
+#libCount { white-space: nowrap; }
+#simBadge { order: 3; flex-basis: 100%; }
+#simBadge:empty { display: none; }
+.empty-lib { padding: 24px 20px; color: var(--ivory-2); }
+.empty-lib p { margin: 0 0 10px; }
+
+/* ---------- stage ---------- */
+.stage { overflow-y: auto; min-height: 0; padding: 36px clamp(24px, 4vw, 56px) 40px; }
+.stage-inner { max-width: 860px; }
+.title { margin: 0; font: 400 clamp(32px, 4.2vw, 46px)/1.08 var(--serif); letter-spacing: .005em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.meta { margin: 10px 0 0; color: var(--ivory-2); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.song-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.song-actions .btn { height: 32px; font-size: 14px; }
+.song-actions .btn[aria-pressed="true"] { border-color: var(--brass); color: var(--brass-hi); }
+.live-head { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
+.live-head .check { padding: 0; color: var(--ivory-2); font-size: 14px; }
+.live { display: block; width: 100%; height: 200px; margin-top: 8px; border-radius: 12px; background: var(--well); border: 1px solid var(--line); }
+.meta b { font-weight: 500; color: var(--ivory); }
+.status-line { margin: 22px 0 12px; min-height: 24px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+.status-line .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--quiet); flex: none; }
+.status-line[data-tone="live"] .dot { background: var(--brass); box-shadow: 0 0 0 4px rgba(211,165,74,.18); }
+.status-line[data-tone="wait"] .dot { background: var(--ivory); }
+.status-line[data-tone="bad"] { color: var(--rose); }
+.status-line[data-tone="bad"] .dot { background: var(--rose); }
+.count { font: 400 28px/1 var(--serif); color: var(--brass); }
+
+.map-wrap { position: relative; }
+.songmap { display: block; width: 100%; height: 148px; border-radius: 12px; background: var(--well); border: 1px solid var(--line); cursor: pointer; touch-action: none; }
+.times { display: flex; justify-content: space-between; margin-top: 8px; color: var(--ivory-2); font-variant-numeric: tabular-nums; font-size: 14px; }
+.times .now { color: var(--ivory); font-weight: 500; }
+.map-legend { color: var(--quiet); font-size: 13px; margin-top: 2px; min-height: 18px; }
+.map-legend .warn { color: var(--rose); }
+
+.transport { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
+.play {
+  width: 68px; height: 68px; border-radius: 50%; border: 0; background: var(--brass); color: var(--brass-ink);
+  display: grid; place-items: center; transition: background .12s, transform .08s;
+}
+.play:hover { background: var(--brass-hi); }
+.play:active { transform: scale(.97); }
+.stop {
+  width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--raised); display: grid; place-items: center;
+}
+.stop:hover { background: #352B43; }
+.stop:disabled { opacity: .4; cursor: default; }
+.transport-hint { color: var(--quiet); font-size: 13px; margin-left: auto; max-width: 320px; text-align: right; }
+.hotkey-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 6px 0; }
+.keycap { min-width: 104px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); font-variant-numeric: tabular-nums; }
+.keycap.listening { border-color: var(--brass); color: var(--brass-hi); }
+
+.controls { margin-top: 28px; border-top: 1px solid var(--line); display: grid; }
+.ctl { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.ctl > label, .ctl > .ctl-name { padding-top: 7px; color: var(--ivory-2); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.note { color: var(--quiet); font-size: 13px; margin-top: 8px; }
+.note.warn { color: var(--rose); }
+
+input[type=range] { -webkit-appearance: none; appearance: none; width: min(340px, 100%); height: 26px; background: none; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(var(--brass), var(--brass)) 0 / var(--fill, 50%) 100% no-repeat, var(--line); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: var(--ivory); border: 3px solid var(--brass); }
+.value { min-width: 58px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.chips { display: flex; gap: 6px; }
+.chip { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--ivory-2); font-variant-numeric: tabular-nums; }
+.chip:hover { color: var(--ivory); border-color: #4A3F5A; }
+.chip[aria-pressed="true"] { background: var(--raised); color: var(--ivory); border-color: var(--brass); }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.stepper button { width: 36px; height: 34px; border: 0; background: var(--raised); font-size: 18px; line-height: 1; }
+.stepper button:hover { background: #352B43; }
+.stepper output { min-width: 52px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { height: 34px; padding: 0 13px; border: 0; border-right: 1px solid var(--line); background: none; color: var(--ivory-2); }
+.seg button:last-child { border-right: 0; }
+.seg button:hover { color: var(--ivory); background: rgba(238,230,211,.04); }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--ivory); box-shadow: inset 0 -2px 0 var(--brass); }
+select.pick { height: 34px; padding: 0 30px 0 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--raised); appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23BDB3A3' stroke-width='1.6'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+.check { display: flex; align-items: center; gap: 10px; padding-top: 6px; }
+.check input { width: 18px; height: 18px; accent-color: var(--brass); margin: 0; }
+.radios { display: grid; gap: 8px; margin: 6px 0 0; }
+.radios label { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--well); cursor: pointer; }
+.radios label:has(input:checked) { border-color: var(--brass); }
+.radios input { margin: 3px 0 0; accent-color: var(--brass); width: 16px; height: 16px; }
+.radios small { display: block; color: var(--ivory-2); font-size: 13px; }
+.set-block { padding: 14px 0; border-top: 1px solid var(--line); }
+.set-block:first-of-type { border-top: 0; padding-top: 4px; }
+.set-block h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+.set-block p { margin: 0; color: var(--ivory-2); font-size: 14px; }
+.foot-btn { background: none; border: 0; color: var(--ivory-2); display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 7px; font-size: 13px; }
+.foot-btn:hover { color: var(--ivory); background: var(--raised); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.preset { height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: none; color: var(--ivory-2); display: inline-flex; align-items: center; gap: 6px; }
+.preset:hover { color: var(--ivory); border-color: #4A3F5A; }
+.preset[aria-pressed="true"] { background: var(--raised); color: var(--ivory); border-color: var(--brass); }
+.preset .x { margin-right: -4px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; color: var(--quiet); }
+.preset .x:hover { background: var(--line); color: var(--ivory); }
+.inline-form { display: flex; gap: 6px; align-items: center; }
+.inline-form input { height: 32px; width: 150px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--well); }
+.word { color: var(--ivory-2); min-width: 120px; }
+.tracks { display: grid; gap: 4px; }
+.track { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.track input { width: 18px; height: 18px; accent-color: var(--brass); margin: 0; }
+.track .t-name { font-weight: 500; }
+.track .t-info { color: var(--quiet); font-size: 13px; }
+.track.disabled { opacity: .55; }
+
+.empty-stage { height: 100%; display: grid; place-items: center; text-align: center; color: var(--ivory-2); }
+.empty-stage h2 { font: 400 34px/1.1 var(--serif); color: var(--ivory); margin: 18px 0 8px; }
+.empty-stage p { margin: 0 auto; max-width: 420px; }
+.sim-note { color: var(--quiet); font-size: 13px; margin-top: 6px; }
+
+/* ---------- overlays ---------- */
+.drop {
+  position: fixed; inset: 0; display: none; place-items: center; z-index: 30; pointer-events: none;
+  background: rgba(23,18,31,.82); border: 2px dashed var(--brass); border-radius: 16px; margin: 10px;
+}
+.drop.on { display: grid; }
+.drop div { text-align: center; }
+.drop h2 { font: 400 36px/1.1 var(--serif); margin: 0 0 6px; }
+.drop p { margin: 0; color: var(--ivory-2); }
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; z-index: 40; max-width: min(560px, 90vw);
+  background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; transition: opacity .2s, transform .2s;
+}
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+.toast.bad { border-color: var(--rose); color: #F1C9C9; }
+.banner { position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: #3A1F28; color: #F1C9C9; padding: 10px 20px; display: none; }
+.banner.on { display: block; }
+
+dialog { background: var(--panel); color: var(--ivory); border: 1px solid var(--line); border-radius: 16px; padding: 0; width: min(560px, 92vw); }
+dialog::backdrop { background: rgba(10,7,14,.7); }
+.dlg { padding: 26px 28px 22px; }
+.dlg h2 { margin: 0 0 6px; font: 400 30px/1.1 var(--serif); }
+.dlg > p { margin: 0 0 18px; color: var(--ivory-2); }
+.steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--well); counter-increment: step; }
+.steps li::before { content: counter(step); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--raised); color: var(--ivory-2); font-weight: 600; font-size: 13px; }
+.steps li.ok::before { content: "✓"; background: var(--brass); color: var(--brass-ink); }
+.steps strong { font-weight: 600; }
+.steps .s-text { color: var(--ivory-2); font-size: 14px; margin-top: 2px; }
+.steps a { color: var(--brass-hi); }
+.dlg-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.dlg-actions .grow { margin-right: auto; color: var(--ivory-2); font-size: 14px; }
+.dlg-error { color: var(--rose); margin: 0 0 14px; }
+details.log { margin: 0 0 16px; }
+details.log summary { color: var(--quiet); cursor: pointer; font-size: 13px; }
+details.log pre { max-height: 180px; overflow: auto; background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--ivory-2); white-space: pre-wrap; margin: 8px 0 0; }
+
+.foot-tools { display: flex; gap: 2px; }
+.add-dlg { width: min(580px, 94vw); }
+.dropzone { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 34px 24px 26px; margin: 4px 0 14px;
+  border: 2px dashed #4A3F5A; border-radius: 14px; background: var(--well); color: var(--ivory-2); cursor: pointer; transition: border-color .12s, background .12s; }
+.dropzone svg { color: var(--brass); }
+.dropzone strong { font: 400 28px/1.15 var(--serif); color: var(--ivory); }
+.dropzone > span:not(.btn) { max-width: 400px; font-size: 14px; }
+.dropzone .btn { margin-top: 8px; pointer-events: none; }
+.dropzone:hover, .dropzone.over { border-color: var(--brass); background: #1A1424; }
+.dropzone.over strong { color: var(--brass-hi); }
+.add-other { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 16px; font-size: 14px; color: var(--quiet); }
+.add-other .link-btn { font-size: 14px; color: var(--ivory-2); text-decoration: underline; text-underline-offset: 3px; }
+.add-other .link-btn:hover { color: var(--ivory); }
+.btn.danger { border-color: rgba(224,138,138,.6); color: #F1C9C9; }
+.btn.danger:hover { background: #3A1F28; border-color: var(--rose); }
+.confirm { margin-top: 10px; padding: 12px 14px; border: 1px solid rgba(224,138,138,.45); border-radius: 10px; background: var(--well); }
+.confirm p { margin: 0 0 10px; color: var(--ivory); }
+.help-dlg { width: min(660px, 94vw); }
+.help-body { max-height: min(64vh, 600px); overflow-y: auto; margin: 0 -28px 16px; padding: 0 28px; }
+.help-body::-webkit-scrollbar { width: 10px; }
+.help-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 3px solid var(--panel); }
+.help-sec { padding: 16px 0; border-top: 1px solid var(--line); }
+.help-sec:first-child { border-top: 0; padding-top: 4px; }
+.help-sec h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.help-sec > p { margin: 0 0 8px; color: var(--ivory-2); font-size: 14px; }
+.help-sec .steps { margin: 0; }
+.help-keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-items: center; font-size: 14px; color: var(--ivory-2); }
+kbd { display: inline-block; min-width: 76px; text-align: center; padding: 1px 8px; border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 6px; background: var(--raised); font: 600 12px/1.7 var(--sans); color: var(--ivory); }
+kbd.off { color: var(--quiet); font-weight: 400; }
+.fixes { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 14px; color: var(--ivory-2); }
+.fixes b { color: var(--ivory); font-weight: 600; }
+.about-grid { display: grid; grid-template-columns: 120px 1fr; gap: 6px 16px; margin: 0 0 12px; font-size: 14px; }
+.about-grid dt { color: var(--quiet); }
+.about-grid dd { margin: 0; overflow-wrap: anywhere; }
+.credits { color: var(--quiet) !important; font-size: 13px !important; margin-top: 10px !important; }
+.empty-help { margin-top: 14px !important; font-size: 14px; }
+.empty-help .link-btn { font-size: 14px; color: var(--brass-hi); text-decoration: underline; text-underline-offset: 3px; }
+
+.btn.best { border-color: rgba(211,165,74,.55); color: var(--brass-hi); gap: 7px; }
+.btn.best:hover { border-color: var(--brass); background: #33291f; }
+.best-panel { margin-top: 12px; padding: 12px 16px; border: 1px solid rgba(211,165,74,.4); border-radius: 12px; background: #1E1826; }
+.best-top { display: flex; align-items: center; gap: 8px; }
+.best-top strong { font-weight: 600; margin-right: auto; }
+.best-list { margin: 8px 0 2px; padding-left: 18px; color: var(--ivory-2); font-size: 14px; display: grid; gap: 4px; }
+.best-none { margin: 6px 0 2px; color: var(--ivory-2); font-size: 14px; }
+.ctl > .ctl-head { padding-top: 7px; color: var(--ivory-2); display: flex; align-items: flex-start; gap: 7px; }
+.hint { flex: none; width: 18px; height: 18px; margin-top: 2px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: none;
+  color: var(--quiet); font: 700 11px/1 var(--sans); display: grid; place-items: center; }
+.hint:hover, .hint:focus-visible { color: var(--ivory); border-color: var(--quiet); }
+.tip { position: fixed; z-index: 70; max-width: 290px; padding: 8px 11px; border-radius: 9px; background: var(--raised); border: 1px solid var(--line);
+  color: var(--ivory); font-size: 13px; line-height: 1.4; box-shadow: 0 10px 24px rgba(0,0,0,.35); pointer-events: none; }
+details.more { border-bottom: 1px solid var(--line); }
+details.more > summary, details.adv > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 16px 0;
+  color: var(--ivory-2); font-weight: 500; }
+details.more > summary::-webkit-details-marker, details.adv > summary::-webkit-details-marker { display: none; }
+details.more > summary::before, details.adv > summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; margin: 0 3px 0 2px; }
+details.more[open] > summary::before, details.adv[open] > summary::before { transform: rotate(45deg); }
+details.more > summary:hover, details.adv > summary:hover { color: var(--ivory); }
+.more-tag { font-size: 12px; font-weight: 600; color: var(--brass-hi); border: 1px solid rgba(211,165,74,.45); border-radius: 10px; padding: 1px 8px; }
+details.more > .controls { margin-top: 0; }
+details.more > .controls > .ctl:last-child { border-bottom: 0; }
+details.adv { border-top: 1px solid var(--line); }
+details.adv > summary { padding: 14px 0; }
+.adv-intro { margin: -4px 0 8px !important; color: var(--quiet) !important; font-size: 13px !important; }
+.welcome-dlg { width: min(600px, 94vw); }
+.small-dlg { width: min(440px, 92vw); }
+.letter { margin: 0 0 18px; padding: 18px 20px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--well); color: var(--ivory-2); font-size: 14.5px; }
+.letter p { margin: 0 0 10px; max-width: 62ch; }
+.letter .hi { font: 400 22px/1.2 var(--serif); color: var(--ivory); }
+.letter .sign { display: grid; margin: 14px 0 2px; }
+.letter .sign b { font: 400 30px/1.05 var(--serif); color: var(--brass-hi); letter-spacing: .01em; }
+.song-actions .btn.del { margin-left: auto; color: var(--ivory-2); gap: 6px; }
+.song-actions .btn.del:hover { border-color: var(--rose); color: #F1C9C9; background: #3A1F28; }
+.steps .btn { margin-top: 10px; height: 32px; font-size: 14px; }
+@media (max-width: 820px) {
+  body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 42vh) 1fr; }
+  .library { border-right: 0; border-bottom: 1px solid var(--line); }
+  .stage { padding: 24px 16px 32px; }
+  .ctl { grid-template-columns: 1fr; gap: 8px; }
+  .transport-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body data-token="__TOKEN__">
+<div class="banner" id="banner" role="alert"></div>
+
+<aside class="library" aria-label="Songs">
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="6" width="7" height="20" rx="1.6" fill="#EEE6D3"/><rect x="12.5" y="6" width="7" height="20" rx="1.6" fill="#EEE6D3"/><rect x="20" y="6" width="7" height="20" rx="1.6" fill="#EEE6D3"/><rect x="9.6" y="6" width="4.6" height="12" rx="1.1" fill="#D3A54A"/><rect x="17.6" y="6" width="4.6" height="12" rx="1.1" fill="#D3A54A"/></svg>
+    <h1>PianoPilot</h1>
+  </div>
+  <div class="search"><label class="sr-only" for="search">Search songs</label><input id="search" type="search" placeholder="Search songs" autocomplete="off">
+    <label class="sr-only" for="sortPick">Sort songs</label>
+    <select class="pick sortpick" id="sortPick" title="Sort songs"><option value="name">A to Z</option><option value="recent">Recent</option><option value="length">Shortest</option><option value="difficulty">Easiest</option></select></div>
+  <div class="lib-actions">
+    <button class="btn primary" id="addBtn" title="Add an MP3, video, MIDI file or text sheet"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a song</button>
+    <span class="menu-wrap">
+      <button class="btn icon" id="moreBtn" title="More ways to add songs" aria-label="More" aria-haspopup="menu" aria-expanded="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>
+      </button>
+      <span class="menu" id="moreMenu" role="menu" hidden>
+        <button role="menuitem" id="pasteSheetBtn">Paste a piano sheet</button>
+        <button role="menuitem" id="importFolderBtn">Import a folder of recordings</button>
+        <button role="menuitem" id="folderBtn">Open the Songs folder</button>
+      </span>
+    </span>
+  </div>
+  <div class="jobs" id="jobs" aria-live="polite"></div>
+  <div class="tabbar" role="tablist" aria-label="Song lists">
+    <button class="tab" role="tab" data-tab="songs" aria-selected="true">Songs</button>
+    <button class="tab" role="tab" data-tab="favorites" aria-selected="false">Favorites<span class="n" id="favCount"></span></button>
+    <button class="tab" role="tab" data-tab="queue" aria-selected="false">Queue<span class="n" id="queueCount"></span></button>
+  </div>
+  <div class="queue-bar" id="queueBar" hidden></div>
+  <ul class="songs" id="songs" aria-label="Song list"></ul>
+  <div class="lib-foot"><span id="libCount"></span><span id="simBadge"></span>
+    <span class="foot-tools"><button class="foot-btn" id="helpBtn" title="How PianoPilot works (press ?)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4.1"/><circle cx="12" cy="17.6" r=".6" fill="currentColor"/></svg>Help</button>
+    <button class="foot-btn" id="settingsBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button></span></div>
+  <input type="file" id="anyInput" multiple hidden accept=".mp3,.wav,.flac,.ogg,.m4a,.aac,.wma,.aiff,.aif,.opus,.mp4,.m4v,.mov,.mkv,.webm,.avi,.wmv,.mpg,.mpeg,.3gp,.flv,.mid,.midi,.txt,audio/*,video/*">
+  <input type="file" id="folderInput" hidden webkitdirectory multiple>
+</aside>
+
+<main class="stage" id="stage"></main>
+
+<div class="drop" id="drop" aria-hidden="true"><div><h2>Drop to add songs</h2><p>MP3s and videos are converted. MIDI files and text sheets are added as they are.</p></div></div>
+<div class="toast" id="toast" role="status"></div>
+
+<dialog id="addDlg" class="add-dlg" aria-labelledby="addTitle">
+  <div class="dlg">
+    <h2 id="addTitle">Add a song</h2>
+    <p>Put in any file. PianoPilot works out what kind it is and does the rest.</p>
+    <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-describedby="dropHint">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14"/></svg>
+      <strong>Drop your file here</strong>
+      <span id="dropHint">MP3s and videos of piano music are turned into songs. MIDI files and text sheets are added as they are. Several files at once is fine.</span>
+      <span class="btn primary" aria-hidden="true">Choose a file</span>
+    </div>
+    <div class="add-other"><span>Other ways</span><button class="link-btn" id="addPaste">Paste a piano sheet</button><button class="link-btn" id="addFolder">Import a whole folder</button></div>
+    <div class="dlg-actions"><button class="btn" id="addClose">Close</button></div>
+  </div>
+</dialog>
+
+<dialog id="sheetDlg" aria-labelledby="sheetTitle">
+  <div class="dlg">
+    <h2 id="sheetTitle">Paste a piano sheet</h2>
+    <p>The text kind people share for Roblox pianos. Letters are keys, [abc] is a chord, notes written together play twice as fast, and | is a pause.</p>
+    <label class="field"><span>Song name</span><input class="text-in" id="sheetName" maxlength="80" placeholder="My sheet"></label>
+    <label class="field"><span>Sheet</span><textarea class="sheet-text" id="sheetText" spellcheck="false" placeholder="t y u i o | [tuo] p s d"></textarea></label>
+    <div class="field"><span>Tempo</span><div class="row"><input type="range" id="sheetBpm" min="40" max="300" step="5" value="120"><output class="value" id="sheetBpmVal">120 BPM</output>
+      <button class="link-btn" id="sheetFileBtn">Open a .txt file</button><input type="file" id="sheetFile" hidden accept=".txt,text/plain"></div></div>
+    <canvas class="mini-map" id="sheetMap" aria-label="Preview of the notes"></canvas>
+    <p class="note" id="sheetInfo"></p>
+    <div class="dlg-actions"><button class="btn" id="sheetCancel">Cancel</button><button class="btn primary" id="sheetSave" disabled>Add to songs</button></div>
+  </div>
+</dialog>
+
+<dialog id="calDlg" aria-labelledby="calTitle">
+  <div class="dlg">
+    <h2 id="calTitle">Calibration test</h2>
+    <p>Six short tests check that PianoPilot sounds right on this piano. Sit at the piano in Roblox first. For each test, press Play test, click into Roblox, listen, then come back and answer.</p>
+    <div class="cal-progress" id="calProgress"></div>
+    <div class="cal-part"><h3 id="calPartTitle"></h3><p id="calQuestion"></p><p class="cal-msg" id="calMsg"></p><p class="cal-status" id="calStatus"></p></div>
+    <div class="dlg-actions">
+      <button class="btn" id="calClose" style="margin-right:auto">Close</button>
+      <button class="btn" id="calPlay">Play test</button>
+      <button class="btn" id="calNo" disabled>No</button>
+      <button class="btn primary" id="calYes" disabled>Yes, it sounded right</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="settings" aria-labelledby="settingsTitle">
+  <div class="dlg">
+    <h2 id="settingsTitle">Settings</h2>
+    <p>These apply to every song, starting the next time you press Play.</p>
+    <div class="set-block">
+      <h3>Calibration test</h3>
+      <p>Recommended the first time. Plays six short tests and fixes your settings based on what you hear.</p>
+      <div class="row" style="margin-top:8px"><button class="btn primary" id="calOpen">Run the calibration test</button></div>
+    </div>
+    <div class="set-block">
+      <h3>Your piano's sustain pedal</h3>
+      <div class="radios" role="radiogroup" aria-label="Sustain pedal">
+        <label><input type="radio" name="pedal_method" value="hold"><span>Hold Space while the pedal is down<small>How most Roblox pianos work.</small></span></label>
+        <label><input type="radio" name="pedal_method" value="tap"><span>Tap Space to turn it on and off<small>For pianos where Space toggles the pedal.</small></span></label>
+        <label><input type="radio" name="pedal_method" value="notes"><span>No pedal: hold the notes longer instead<small>For pianos without a sustain key.</small></span></label>
+      </div>
+    </div>
+    <div class="set-block">
+      <h3>Hotkeys</h3>
+      <p id="hotkeyIntro">Work while Roblox is in front, and inside PianoPilot (where Home, End and the Page keys still scroll). Click a box, then press F1 to F12, Home, End, Insert, Delete, Page Up, Page Down or Pause. Backspace turns one off.</p>
+      <div id="hotkeyRows" style="margin-top:6px"></div>
+    </div>
+    <div class="set-block">
+      <h3>New songs</h3>
+      <label class="check"><input type="checkbox" id="autoSetup"> Set up new songs for me</label>
+      <p>Every song you add gets the “Best for this song” settings. You can still change anything afterwards.</p>
+    </div>
+    <div class="set-block">
+      <h3>Desktop and Start menu</h3>
+      <p id="shortcutText">Add PianoPilot to your desktop and Start menu, so you can open it like any other app.</p>
+      <div class="row" style="margin-top:8px"><button class="btn" id="shortcutAdd">Add to desktop and Start menu</button><button class="link-btn" id="shortcutRemove" hidden>Remove them</button></div>
+    </div>
+    <details class="adv" id="advSettings">
+      <summary><span class="sum-text">Advanced</span><span class="more-tag" id="advTag" hidden></span></summary>
+      <p class="adv-intro">Fine-tuning for unusual pianos. The calibration test sets most of these for you.</p>
+      <div class="set-block">
+      <h3>Black keys</h3>
+      <p>If black keys come out as white keys, raise this pause around Shift.</p>
+      <div class="row" style="margin-top:8px"><input type="range" id="shiftGap" min="0" max="60" step="5"><output class="value" id="shiftGapVal"></output></div>
+    </div>
+      <div class="set-block">
+      <h3>Chord tightness</h3>
+      <p>Notes that start this close together are pressed as one chord.</p>
+      <div class="row" style="margin-top:8px"><input type="range" id="chordWin" min="0" max="40" step="1"><output class="value" id="chordWinVal"></output></div>
+    </div>
+      <div class="set-block">
+      <h3>Key hold time</h3>
+      <p>The shortest time a key stays down. Raise it if fast repeated notes blur together.</p>
+      <div class="row" style="margin-top:8px"><input type="range" id="keyHold" min="10" max="120" step="5"><output class="value" id="keyHoldVal"></output></div>
+    </div>
+      <div class="set-block">
+      <h3>Key layout</h3>
+      <p>Only for pianos that don't use the standard Roblox keys. List the keys from the lowest note up; capitals and ! @ # $ % ^ &amp; * ( ) mean Shift.</p>
+      <div class="radios" role="radiogroup" aria-label="Key layout" style="margin-top:8px">
+        <label><input type="radio" name="layout_mode" value="standard"><span>Standard Roblox piano<small>61 keys from 1 to m, with 88-key mode available.</small></span></label>
+        <label><input type="radio" name="layout_mode" value="custom"><span>Custom<small>Your own list of keys.</small></span></label>
+      </div>
+      <div id="layoutCustom" hidden style="margin-top:10px">
+        <textarea class="sheet-text" id="layoutText" spellcheck="false" style="min-height:64px"></textarea>
+        <div class="row" style="margin-top:8px"><label for="layoutLowest" style="color:var(--ivory-2)">Lowest note (MIDI number, 36 is C2, 60 is middle C)</label><input class="text-in" id="layoutLowest" type="number" min="12" max="108" style="width:90px"></div>
+        <div class="row" style="margin-top:8px"><button class="btn" id="layoutSave">Use this layout</button><span class="note" id="layoutMsg" style="margin:0"></span></div>
+      </div>
+    </div>
+    </details>
+    <div class="set-block">
+      <h3>Start over</h3>
+      <p>Put settings back to how they were when you first opened PianoPilot. Your songs, favorites and queue always stay.</p>
+      <div class="row" style="margin-top:8px"><button class="btn" data-reset="app">Reset these settings</button><button class="btn" data-reset="songs">Reset every song's settings</button></div>
+      <div class="confirm" id="resetConfirm" hidden role="alertdialog" aria-labelledby="resetText">
+        <p id="resetText"></p>
+        <div class="row"><button class="btn danger" id="resetYes">Reset</button><button class="btn" id="resetNo">Cancel</button></div>
+      </div>
+    </div>
+    <div class="dlg-actions"><span class="grow" id="settingsSaved"></span><button class="btn primary" id="settingsClose">Done</button></div>
+  </div>
+</dialog>
+
+<dialog id="welcomeDlg" class="welcome-dlg" aria-labelledby="welcomeTitle">
+  <div class="dlg">
+    <h2 id="welcomeTitle">Welcome to PianoPilot</h2>
+    <p>It plays songs on Roblox pianos for you. Three quick steps and you're playing.</p>
+    <ol class="steps">
+      <li><div><strong>Sit at a piano in Roblox</strong><div class="s-text">Any Roblox piano works; Visual Pianos is a good place to start. Close the chat box, or the notes get typed into it.</div></div></li>
+      <li><div><strong>Run the calibration test</strong><div class="s-text">Six short tests check how your piano handles black keys, fast notes and the pedal, and fix the settings for you.</div><button class="btn" id="welcomeCal">Run the test</button></div></li>
+      <li><div><strong>Add your first song</strong><div class="s-text">An MP3, a MIDI file or a text sheet. PianoPilot sets it up for you, then press Play and click into Roblox.</div><button class="btn" id="welcomeAdd">Add a song</button></div></li>
+    </ol>
+    <section class="letter" aria-label="A note from Waaa">
+      <p class="hi">Hi there,</p>
+      <p>PianoPilot started as a random idea and turned into a passion project. The goal was to test what AI can do: nearly everything here, the code, the design and the testing, was made by an AI (Claude, by Anthropic), while I steered it and tried each version on real Roblox pianos.</p>
+      <p>It's free and open source, and there's no harm meant by it. It just plays music. If anyone asks you to pay for it, it didn't come from me.</p>
+      <p>It also stands on other people's open-source work: turning MP3s into songs uses the Pianoscribe engine by Justagwas and the TransKun piano model by Yujia Yan. Thank you to both.</p>
+      <p class="sign"><span>Have fun,</span><b>Waaa</b></p>
+    </section>
+    <div class="dlg-actions"><span class="grow">You can open this again from Help.</span><button class="btn primary" id="welcomeDone">Got it</button></div>
+  </div>
+</dialog>
+
+<dialog id="delDlg" class="small-dlg" aria-labelledby="delTitle" aria-describedby="delText">
+  <div class="dlg">
+    <h2 id="delTitle">Delete this song?</h2>
+    <p id="delText"></p>
+    <div class="dlg-actions"><button class="btn" id="delNo">Keep it</button><button class="btn danger" id="delYes">Delete song</button></div>
+  </div>
+</dialog>
+
+<dialog id="helpDlg" class="help-dlg" aria-labelledby="helpTitle">
+  <div class="dlg">
+    <h2 id="helpTitle">How PianoPilot works</h2>
+    <p>PianoPilot presses the keys of a Roblox piano for you, in time with a song.</p>
+    <div class="help-body">
+      <section class="help-sec">
+        <h3>Play a song</h3>
+        <ol class="steps">
+          <li><div><strong>Sit at a piano in Roblox</strong><div class="s-text">Close the chat box first, or the notes get typed into it.</div></div></li>
+          <li><div><strong>Pick a song here and press Play</strong><div class="s-text">Or press Space. Best for this song (under the title) picks good settings for you; Speed, Play like and the rest are below the song map.</div></div></li>
+          <li><div><strong>Click into the Roblox window</strong><div class="s-text">It counts down from 3, then plays.</div></div></li>
+          <li><div><strong>Click out of Roblox to pause</strong><div class="s-text">It never types into other windows. Click back into Roblox to carry on.</div></div></li>
+        </ol>
+      </section>
+      <section class="help-sec">
+        <h3>Hotkeys</h3>
+        <p>These work while Roblox is in front. In PianoPilot itself the F keys work too, while Home, End, Page Up and Page Down keep their usual jobs (scrolling, moving through the song list). Change them in Settings.</p>
+        <div class="help-keys" id="helpKeys"></div>
+      </section>
+      <section class="help-sec">
+        <h3>Adding songs</h3>
+        <ul class="fixes">
+          <li><b>Any file:</b> press Add a song (top left) and drop it in, or drop it anywhere on this window. MP3s and videos are turned into songs; piano-only recordings come out best. MIDI files are added as they are. Each new song gets set up for you (Settings, New songs).</li>
+          <li><b>Text sheets</b> like [tu] y o | p: Add a song, then Paste a piano sheet. Or drop a .txt sheet in.</li>
+          <li><b>A whole folder</b> of recordings: Add a song, then Import a whole folder.</li>
+          <li><b>Deleting a song:</b> open it and press Delete (right side, under the title). It goes to the Recycle Bin, so you can get it back from there.</li>
+        </ul>
+      </section>
+      <section class="help-sec">
+        <h3>If something sounds off</h3>
+        <ul class="fixes">
+          <li><b>Start here:</b> run the calibration test in Settings. It fixes most problems for you.</li>
+          <li><b>A song sounds messy:</b> press Best for this song under its title. Undo puts it back.</li>
+          <li><b>Black keys sound like white keys:</b> in Settings, open Advanced and raise Black keys to about 20 ms.</li>
+          <li><b>Fast notes blur together:</b> in Settings, open Advanced and raise Key hold time.</li>
+          <li><b>The camera flips on black keys:</b> turn off Shift Lock Switch in Roblox's settings.</li>
+          <li><b>Nothing gets pressed:</b> if Roblox runs as administrator, right-click PianoPilot.exe and choose Run as administrator.</li>
+          <li><b>Some notes are missing:</b> the song goes past the piano's 61 keys. Press Best for this song, or try Best fit and 88 keys under More controls.</li>
+        </ul>
+      </section>
+      <section class="help-sec">
+        <h3>About</h3>
+        <dl class="about-grid" id="aboutGrid"></dl>
+        <div class="row"><button class="btn" id="openLog">Open the log</button><button class="btn" id="helpSongs">Open the Songs folder</button><button class="btn" id="helpWelcome">Show the welcome again</button></div>
+        <p class="note" style="margin-top:12px">The first time you open PianoPilot.exe, Windows may say “Windows protected your PC”. Click More info, then Run anyway. Windows shows this for apps that aren't digitally signed by a known publisher. PianoPilot.exe only starts pianopilot.py with Python, and its source is in the launcher folder.</p>
+        <p class="credits">PianoPilot is a free, open-source passion project by Waaa, built with AI (Claude, by Anthropic). Show the welcome again to read the note. Audio import uses the transcription engine from Pianoscribe by Justagwas (GPL-3.0) and the TransKun piano model by Yujia Yan (MIT). Fonts: Instrument Sans and Instrument Serif (SIL Open Font License). The license files are in the engine and ui/fonts folders.</p>
+      </section>
+    </div>
+    <div class="dlg-actions"><button class="btn primary" id="helpClose">Done</button></div>
+  </div>
+</dialog>
+
+<dialog id="setup" aria-labelledby="setupTitle">
+  <div class="dlg">
+    <h2 id="setupTitle">Set up audio import</h2>
+    <p>Turning recordings into songs needs two things on this PC. You only do this once.</p>
+    <ol class="steps" id="setupSteps"></ol>
+    <p class="dlg-error" id="setupError" hidden></p>
+    <details class="log" id="setupLogWrap" hidden><summary>Show details</summary><pre id="setupLog"></pre></details>
+    <div class="dlg-actions">
+      <span class="grow" id="setupStep"></span>
+      <button class="btn" id="setupPy" hidden>Use Python 3.13</button>
+      <button class="btn" id="setupClose">Close</button>
+      <button class="btn primary" id="setupGo">Set up</button>
+    </div>
+  </div>
+  <input type="file" id="modelInput" hidden accept=".pianoscribe">
+</dialog>
+
+<script>
+"use strict";
+const TOKEN = document.body.dataset.token;
+const $ = (s, el = document) => el.querySelector(s);
+const ACTIVE = new Set(["waiting", "countdown", "playing", "paused"]);
+const MIDI_EXT = [".mid", ".midi"];
+const AUDIO_EXT = [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma", ".aiff", ".aif", ".opus", ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".wmv", ".mpg", ".mpeg", ".3gp", ".flv"];
+const LEVELS = { Easy: 1, Medium: 2, Hard: 3, Expert: 4 };
+
+const S = {
+  songs: [], sig: "", selected: null, song: null, status: { state: "idle", pos: 0, total: 0 }, statusAt: 0,
+  jobs: [], localPos: 0, drag: null, pendingAudio: [], audioReady: null, simulated: false, search: "", loaded: false,
+  ui: { more_open: false, welcomed: true }, bestUndo: null,
+  loading: null,        // the song being opened, while it loads
+  latestRev: {},        // newest settings change number heard for each song
+  heldNotes: {},        // setup notes fetched for a song that wasn't on screen by the time they arrived
+};
+// The song on screen is the one picked in the list (not the one before it, still showing while the new one loads).
+function songReady() { return !!(S.song && S.song.meta && S.song.meta.key === S.selected); }
+function stageKey() { return songReady() ? S.song.meta.key : null; }
+
+// ---------- helpers ----------
+async function api(method, path, body, raw) {
+  const opts = { method, headers: { "X-PianoPilot": TOKEN } };
+  if (raw !== undefined) opts.body = raw;
+  else if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { throw new Error("PianoPilot isn't responding. Close this window and open PianoPilot again."); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || `Request failed (${res.status})`); err.status = res.status; throw err; }
+  return data;
+}
+function fmt(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+}
+function ext(name) { const i = name.lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+let toastTimer;
+function toast(text, bad = false) {
+  const t = $("#toast"); t.textContent = text; t.classList.toggle("bad", bad); t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), bad ? 6000 : 3200);
+}
+function debounce(fn, ms) {
+  let t = null, args = [], running = Promise.resolve();
+  // saves go one after another, so an older one can never arrive after a newer one
+  const run = () => { t = null; const a = args; running = running.then(() => fn(...a)).catch(() => {}); return running; };
+  const d = (...a) => { args = a; clearTimeout(t); t = setTimeout(run, ms); };
+  d.flush = () => { if (t === null) return running; clearTimeout(t); return run(); };   // send a waiting save now
+  d.cancel = () => { clearTimeout(t); t = null; };
+  return d;
+}
+function isActiveHere() { return ACTIVE.has(S.status.state) && S.status.key === S.selected; }
+function currentPos() {
+  if (S.drag) return S.drag.pos;
+  if (!isActiveHere()) return S.localPos;
+  let p = S.status.pos;
+  if (S.status.state === "playing") p += (performance.now() - S.statusAt) / 1000 * (S.song?.settings.speed || 1);
+  return Math.min(p, S.status.total || p);
+}
+function songDuration() { return S.song ? S.song.meta.duration : 0; }
+
+// ---------- live updates ----------
+function connect() {
+  const es = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
+  let failures = 0;
+  es.addEventListener("hello", e => {
+    failures = 0; $("#banner").classList.remove("on");
+    const d = JSON.parse(e.data);
+    S.simulated = d.simulated; S.jobs = d.jobs; S.queue = d.queue || []; S.isWindows = d.is_windows; renderJobs();
+    $("#simBadge").textContent = d.simulated ? "Test mode: no keys are sent" : "";
+    setStatus(d.status);
+    if (d.sig !== S.sig) loadLibrary();
+  });
+  es.addEventListener("status", e => setStatus(JSON.parse(e.data)));
+  es.addEventListener("jobs", e => { S.jobs = JSON.parse(e.data); renderJobs(); });
+  es.addEventListener("notice", e => { const d = JSON.parse(e.data); toast(d.text, !!d.bad); });
+  es.addEventListener("queue", e => { S.queue = JSON.parse(e.data).items; renderLibrary(); renderStatus(); });
+  es.addEventListener("favorites", e => applyFavorites(JSON.parse(e.data).keys));
+  es.addEventListener("song-settings", e => {
+    const d = JSON.parse(e.data);
+    S.latestRev[d.key] = Math.max(S.latestRev[d.key] || 0, d.rev || 0);   // a song still loading reads again
+    if (applyServerSettings(d.key, d.settings, d.rev) && d.setup) fetchSetupNote(d.key);
+  });
+  es.addEventListener("library", e => { const d = JSON.parse(e.data); loadLibrary(d.select); });
+  es.addEventListener("reset", () => afterReset());
+  es.addEventListener("setup", () => { if (dlg.open) api("GET", "/api/audio/status").then(renderSetup).catch(() => {}); });
+  es.onerror = () => {
+    failures++;
+    if (failures > 2) { const b = $("#banner"); b.textContent = "PianoPilot has stopped. Close this window and open PianoPilot again."; b.classList.add("on"); }
+  };
+}
+
+function setStatus(st) {
+  const prev = S.status;
+  if (st.key === "__test__" && calDlg.open) {
+    const words = { waiting: "Click into Roblox to hear it.", countdown: `Starting in ${st.count}…`, playing: "Playing…",
+      finished: "Done. Did it sound right?", stopped: "Stopped.", paused: "Paused. Click back into Roblox." };
+    $("#calStatus").textContent = words[st.state] || "";
+  }
+  if (st.key && st.key !== prev.key && ACTIVE.has(st.state) && prev.key === S.selected && S.songs.some(x => x.key === st.key)) {
+    selectSong(st.key);
+  }
+  S.status = st; S.statusAt = performance.now();
+  if (st.key && st.key === S.selected && ["stopped", "finished"].includes(st.state)) {
+    S.localPos = st.state === "finished" ? 0 : (prev.userStop ? 0 : st.pos);
+  }
+  renderTransport(); renderStatus(); markPlaying();
+  if (st.state === "playing") startAnim(); else drawMap();
+}
+
+// ---------- library ----------
+async function loadLibrary(select) {
+  try {
+    const d = await api("GET", "/api/library");
+    S.songs = d.songs; S.sig = d.sig; S.loaded = true;
+    renderLibrary();
+    const want = select || S.selected || (S.status.key) || d.last_song;
+    if (want && S.songs.some(s => s.key === want)) { if (want !== S.selected || select) selectSong(want); }
+    else if (S.selected && !S.songs.some(s => s.key === S.selected)) { S.selected = null; S.song = null; renderStage(); }
+    else if (!S.selected) renderStage();
+  } catch (e) { toast(e.message, true); }
+}
+
+function store(name, value) { try { localStorage.setItem("pp." + name, value); } catch (e) { /* storage unavailable */ } }
+function recall(name, fallback) { try { return localStorage.getItem("pp." + name) || fallback; } catch (e) { return fallback; } }
+S.tab = "songs"; S.sort = recall("sort", "name"); S.queue = [];
+
+function sortedSongs(list) {
+  const by = {
+    name: (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+    recent: (a, b) => (b.played || 0) - (a.played || 0) || a.title.localeCompare(b.title),
+    length: (a, b) => (a.duration || 0) - (b.duration || 0),
+    difficulty: (a, b) => (a.nps || 0) - (b.nps || 0),
+  }[S.sort] || ((a, b) => 0);
+  return list.slice().sort(by);
+}
+
+function songRow(s, extra = "", tools = "") {
+  const level = LEVELS[s.difficulty] || 0;
+  const sub = s.error ? `<span class="bad">Can't read this file</span>`
+    : `${s.favorite ? '<span class="star" title="Favorite">★</span>' : ""}<span>${fmt(s.duration)}</span><span>${esc(s.difficulty)}</span>${s.folder ? `<span>${esc(s.folder)}</span>` : ""}`;
+  const meter = s.error ? "" : `<span class="meter" title="${esc(s.difficulty)}: about ${s.nps} notes a second in busy parts">${[1, 2, 3, 4].map(i => `<i class="${i <= level ? "on" : ""}"></i>`).join("")}</span>`;
+  return `<li><button class="song" data-key="${esc(s.key)}" aria-current="${s.key === S.selected}">
+      <span class="song-title" title="${esc(s.title)}">${extra}${s.key === S.status.key && ACTIVE.has(S.status.state) ? '<span class="playing-dot" title="Playing"></span>' : ""}${esc(s.title)}</span>
+      ${meter}<span class="song-sub">${sub}</span></button>${tools ? `<span class="row-tools">${tools}</span>` : ""}</li>`;
+}
+
+function renderLibrary() {
+  const ul = $("#songs");
+  const q = S.search.trim().toLowerCase();
+  const byKey = new Map(S.songs.map(s => [s.key, s]));
+  const favs = S.songs.filter(s => s.favorite);
+  $("#libCount").textContent = S.songs.length === 1 ? "1 song" : `${S.songs.length} songs`;
+  $("#favCount").textContent = favs.length ? String(favs.length) : "";
+  $("#queueCount").textContent = S.queue.length ? String(S.queue.length) : "";
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === S.tab)));
+  $("#sortPick").disabled = S.tab === "queue"; $("#sortPick").value = S.sort;
+  const bar = $("#queueBar");
+  bar.hidden = S.tab !== "queue";
+  if (S.tab === "queue") {
+    bar.innerHTML = S.queue.length
+      ? `<span>Plays in this order after the current song.</span><button class="link-btn" data-q="shuffle">Shuffle</button><button class="link-btn" data-q="clear">Clear</button>`
+      : `<button class="link-btn" data-q="shuffle_all">Shuffle all songs into the queue</button>`;
+    if (!S.queue.length) { ul.innerHTML = `<li class="empty-lib"><p>The queue is empty.</p><p>Point at a song and press + to add it. Queued songs play one after another.</p></li>`; return; }
+    ul.innerHTML = S.queue.map((key, i) => {
+      const song = byKey.get(key) || { key, title: key.replace(/\.midi?$/i, ""), difficulty: "", duration: 0, error: "missing" };
+      const tools = `${i ? `<button class="tool" data-qmove="${i}" title="Move up" aria-label="Move up">↑</button>` : ""}<button class="tool" data-qremove="${i}" title="Remove from queue" aria-label="Remove from queue">✕</button>`;
+      return songRow(song, `<span class="qnum">${i + 1}</span>`, tools);
+    }).join("");
+    return;
+  }
+  const pool = S.tab === "favorites" ? favs : S.songs;
+  const list = sortedSongs(pool.filter(s => !q || s.title.toLowerCase().includes(q)));
+  if (!S.songs.length) {
+    ul.innerHTML = `<li class="empty-lib"><p>No songs yet.</p><p>Press Add a song, or drop an MP3 or MIDI file anywhere in this window.</p></li>`;
+    return;
+  }
+  if (S.tab === "favorites" && !favs.length) { ul.innerHTML = `<li class="empty-lib"><p>No favorites yet.</p><p>Point at a song and press ☆ to add it here.</p></li>`; return; }
+  if (!list.length) { ul.innerHTML = `<li class="empty-lib"><p>No songs match “${esc(S.search)}”.</p></li>`; return; }
+  ul.innerHTML = list.map(s => songRow(s, "", s.error ? "" :
+    `<button class="tool" data-fav="${esc(s.key)}" aria-pressed="${!!s.favorite}" title="${s.favorite ? "Remove from favorites" : "Add to favorites"}" aria-label="Favorite">${s.favorite ? "★" : "☆"}</button>` +
+    `<button class="tool" data-queue="${esc(s.key)}" title="Add to queue" aria-label="Add to queue">+</button>`)).join("");
+}
+
+async function setFavorite(key, on) {
+  try {
+    const d = await api("POST", "/api/favorite", { key, on });
+    applyFavorites(d.favorites);
+  } catch (e) { toast(e.message, true); }
+}
+function applyFavorites(keys) {
+  const set = new Set(keys);
+  S.songs.forEach(s => { s.favorite = set.has(s.key); });
+  renderLibrary(); renderSongActions();
+}
+async function queueAction(action, key, index) {
+  try {
+    const d = await api("POST", "/api/queue", { action, key, index });
+    S.queue = d.items; renderLibrary(); renderStatus(); renderSongActions();
+    if (action === "add") toast(`Added to the queue (${S.queue.length}).`);
+    if (action === "next") toast("Plays next.");
+  } catch (e) { toast(e.message, true); }
+}
+document.querySelector(".tabbar").addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if (!t) return;
+  S.tab = t.dataset.tab; renderLibrary();
+});
+$("#sortPick").addEventListener("change", e => { S.sort = e.target.value; store("sort", S.sort); renderLibrary(); });
+$("#queueBar").addEventListener("click", e => { const b = e.target.closest("[data-q]"); if (b) queueAction(b.dataset.q); });
+$("#songs").addEventListener("click", e => {
+  const tool = e.target.closest(".tool");
+  if (tool) {
+    e.stopPropagation();
+    if (tool.dataset.fav) setFavorite(tool.dataset.fav, tool.getAttribute("aria-pressed") !== "true");
+    else if (tool.dataset.queue) queueAction("add", tool.dataset.queue);
+    else if (tool.dataset.qmove) queueAction("move", null, +tool.dataset.qmove);
+    else if (tool.dataset.qremove) queueAction("remove", null, +tool.dataset.qremove);
+  }
+}, true);
+let lastMark = "";
+function markPlaying() {
+  const mark = ACTIVE.has(S.status.state) ? S.status.key : "";
+  if (mark !== lastMark) { lastMark = mark; renderLibrary(); }
+}
+
+$("#songs").addEventListener("click", e => { const b = e.target.closest(".song"); if (b) selectSong(b.dataset.key); });
+$("#songs").addEventListener("keydown", e => {
+  if (!["ArrowDown", "ArrowUp"].includes(e.key)) return;
+  const btns = [...document.querySelectorAll(".song")]; const i = btns.indexOf(document.activeElement);
+  const next = btns[i + (e.key === "ArrowDown" ? 1 : -1)];
+  if (next) { e.preventDefault(); next.focus(); selectSong(next.dataset.key); }
+});
+$("#search").addEventListener("input", e => { S.search = e.target.value; renderLibrary(); });
+
+async function selectSong(key) {
+  const hadFocus = document.activeElement && document.activeElement.classList.contains("song");
+  S.selected = key;
+  S.selectSeq = Math.max(Date.now(), (S.selectSeq || 0) + 1);      // an older pick can't land after a newer one
+  api("POST", "/api/select", { key, seq: S.selectSeq }).catch(() => {});
+  renderLibrary();
+  if (hadFocus) { const b = [...document.querySelectorAll(".song")].find(x => x.dataset.key === key); if (b) b.focus(); }
+  const entry = S.songs.find(s => s.key === key);
+  if (entry && entry.error) { S.song = null; renderStage(entry); return; }
+  const load = (async () => {
+    try {
+      const url = `/api/song?key=${encodeURIComponent(key)}&note=1`;
+      let d = await api("GET", url);
+      if ((S.latestRev[key] || 0) > (d.rev || 0)) {   // it changed while loading (it was being set up, say)
+        const note = d.setup_note;
+        d = await api("GET", url);
+        d.setup_note = d.setup_note || note;
+      }
+      d.setup_note = d.setup_note || S.heldNotes[key] || null;
+      delete S.heldNotes[key];
+      if (S.selected !== key) { if (d.setup_note) S.heldNotes[key] = d.setup_note; return; }
+      S.song = d; S.localPos = 0;
+      Object.assign(S.song.settings, unsaved(key));   // changes to it that are still on their way
+      renderStage();
+      $("#stage").scrollTop = 0;          // a newly picked song starts at the top, where its title and setup note are
+    } catch (e) { toast(e.message, true); }
+  })();
+  S.loading = load;
+  await load;
+  if (S.loading === load) S.loading = null;
+}
+function fetchSetupNote(key) {
+  api("GET", `/api/song?key=${encodeURIComponent(key)}&note=1`).then(x => {
+    if (!x.setup_note) return;
+    if (stageKey() !== key) { S.heldNotes[key] = x.setup_note; return; }
+    const current = applyServerSettings(key, x.settings, x.rev, x.report);
+    // if you've changed this song since, the list still shows, but without an Undo that could undo your change
+    showBestPanel("Set up for you when you added it", x.setup_note.changes, current ? x.setup_note.previous : null);
+  }).catch(() => {});
+}
+
+// ---------- stage ----------
+function renderStage(broken) {
+  const st = $("#stage");
+  if (broken) {
+    st.innerHTML = `<div class="stage-inner"><h2 class="title">${esc(broken.title)}</h2><p class="status-line" data-tone="bad"><span class="dot"></span>${esc(broken.error)}</p></div>`;
+    return;
+  }
+  if (!S.song) {
+    if (!S.loaded) { st.innerHTML = ""; return; }
+    st.innerHTML = `<div class="empty-stage"><div>
+      <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="6" width="7" height="20" rx="1.6" fill="#2A2236"/><rect x="12.5" y="6" width="7" height="20" rx="1.6" fill="#2A2236"/><rect x="20" y="6" width="7" height="20" rx="1.6" fill="#2A2236"/><rect x="9.6" y="6" width="4.6" height="12" rx="1.1" fill="#3A3048"/><rect x="17.6" y="6" width="4.6" height="12" rx="1.1" fill="#3A3048"/></svg>
+      <h2>${S.songs.length ? "Pick a song" : "Add your first song"}</h2>
+      <p>${S.songs.length ? "Choose a song on the left, then press Play and click into Roblox." : "Press Add a song and put in an MP3 of a piano piece or a MIDI file. You can also drop files anywhere on this window."}</p>
+      <p class="empty-help">New here? <button class="link-btn" data-open-help>Read the quick start</button></p></div></div>`;
+    return;
+  }
+  const m = S.song.meta, cfg = S.song.settings;
+  st.innerHTML = `<div class="stage-inner">
+    <h2 class="title" title="${esc(m.title)}">${esc(m.title)}</h2>
+    <p class="meta"><span><b>${fmt(m.duration)}</b> long</span><span><b>${m.notes.toLocaleString()}</b> notes</span><span><b>${esc(m.difficulty)}</b>, about ${m.nps} notes a second in busy parts</span></p>
+    <div class="song-actions" id="songActions"></div>
+    <div class="best-panel" id="bestPanel" role="status" aria-live="polite" hidden></div>
+    <details class="details" id="details"><summary>Song details and text sheet</summary><div id="detailsBody"></div></details>
+    <div class="status-line" id="statusLine" role="status" aria-live="polite"></div>
+    <div class="map-wrap">
+      <canvas class="songmap" id="map" tabindex="0" role="slider" aria-label="Song position. Click or drag to jump." aria-valuemin="0"></canvas>
+      <div class="times"><span class="now" id="tNow">0:00</span><span id="tTotal">${fmt(m.duration)}</span></div>
+      <div class="map-legend" id="legend"></div>
+    </div>
+    <div class="transport">
+      <button class="play" id="playBtn"></button>
+      <button class="stop" id="stopBtn" aria-label="Stop" title="Stop"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2" fill="currentColor"/></svg></button>
+      <span class="transport-hint"><span id="hotkeyHint"></span> Close the chat box first, or the notes get typed into it.<br><button class="link-btn" id="miniBtn" style="padding-left:0;margin-top:4px">Open the mini player</button></span>
+    </div>
+    <div class="live-head"><label class="check"><input type="checkbox" id="liveToggle"> Live keyboard</label><span class="note" id="liveNote" style="margin:0"></span></div>
+    <canvas class="live" id="live" aria-label="Keyboard showing which keys are being pressed" role="img"></canvas>
+    <section class="controls" aria-label="Song settings">
+      <div class="ctl">
+        <div class="ctl-head"><label for="speed">Speed</label>${hint("speed")}</div>
+        <div>
+          <div class="row">
+            <input type="range" id="speed" min="0.25" max="2" step="0.05" value="${cfg.speed}">
+            <output class="value" id="speedVal" for="speed"></output>
+            <div class="chips" role="group" aria-label="Speed presets">${[0.5, 0.75, 1, 1.25].map(v => `<button class="chip" data-speed="${v}">${v}×</button>`).join("")}</div>
+          </div>
+          <div class="note" id="speedNote"></div>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name">Play like</span>${hint("playlike")}</div>
+        <div><div class="presets" id="presets"></div><div class="note" id="presetNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name" id="pedalLabel">Pedal</span>${hint("pedal")}</div>
+        <div><div class="seg" role="group" aria-labelledby="pedalLabel" data-setting="pedal_mode">
+          <button data-value="off">Off</button><button data-value="song">From the song</button><button data-value="auto">Auto</button><button data-value="always">Always on</button></div>
+          <div class="note" id="pedalNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name" id="loopLabel">Loop</span>${hint("loop")}</div>
+        <div><div class="row"><div class="seg" role="group" aria-labelledby="loopLabel" data-setting="loop_mode">
+          <button data-value="off">Off</button><button data-value="song">Whole song</button><button data-value="ab">A to B</button></div>
+          <button class="btn" id="setA">Set A here</button><button class="btn" id="setB">Set B here</button></div>
+          <div class="note" id="loopNote"></div></div>
+      </div>
+    </section>
+    <details class="more" id="more"${S.ui.more_open ? " open" : ""}>
+      <summary><span class="sum-text">More controls</span><span class="more-tag" id="moreTag" hidden></span></summary>
+      <section class="controls" aria-label="More song settings">
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name" id="trLabel">Transpose</span>${hint("transpose")}</div>
+        <div>
+          <div class="row">
+            <span class="stepper" role="group" aria-labelledby="trLabel"><button id="trDown" aria-label="Transpose down">−</button><output id="trVal"></output><button id="trUp" aria-label="Transpose up">+</button></span>
+            <button class="btn" id="bestFit">Best fit</button>
+            <button class="link-btn" id="trReset">Reset</button>
+          </div>
+          <div class="note" id="trNote"></div>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name">Tracks</span>${hint("tracks")}</div>
+        <div><div class="tracks" id="tracks"></div><div class="note" id="tracksNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="feel">Feel</label>${hint("feel")}</div>
+        <div><div class="row"><input type="range" id="feel" min="0" max="100" step="1"><output class="value" id="feelVal"></output><span class="word" id="feelWord"></span></div>
+          <div class="note">Small timing differences, rolled chords and a tempo that breathes, like a real player.</div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="mistakes">Mistakes</label>${hint("mistakes")}</div>
+        <div><div class="row"><input type="range" id="mistakes" min="0" max="100" step="1"><output class="value" id="mistakesVal"></output><span class="word" id="mistakesWord"></span></div>
+          <div class="note" id="mistakesNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name">Takes</span>${hint("takes")}</div>
+        <div><label class="check"><input type="checkbox" id="lockTake"> Lock this take</label><div class="note" id="takeNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name" id="rangeLabel">Notes outside the piano</span>${hint("range")}</div>
+        <div><div class="seg" role="group" aria-labelledby="rangeLabel" data-setting="range_mode">
+          <button data-value="octave">Move an octave</button><button data-value="skip">Skip them</button><button data-value="88">Use 88 keys</button></div>
+          <div class="note" id="rangeNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="maxNotes">Keys at once</label>${hint("maxnotes")}</div>
+        <div><select class="pick" id="maxNotes"><option value="0">No limit</option>${[2, 3, 4, 5, 6, 8, 10].map(n => `<option value="${n}">${n} keys</option>`).join("")}</select>
+          <div class="note" id="maxNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name" id="styleLabel">Note length</span>${hint("style")}</div>
+        <div><div class="seg" role="group" aria-labelledby="styleLabel" data-setting="note_style">
+          <button data-value="real">As written</button><button data-value="short">Short taps</button><button data-value="legato">Smooth</button></div>
+          <div class="note" id="styleNote"></div></div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><span class="ctl-name">Cleanup</span>${hint("cleanup")}</div>
+        <div><label class="check"><input type="checkbox" id="cleanup"> Clean up messy notes</label><div class="note" id="cleanNote"></div></div>
+      </div>
+      </section>
+    </details>
+  </div>`;
+  wireStage();
+  renderControls(); renderTransport(); renderStatus(); renderSongActions(); renderHotkeyHint(); renderDetails(); buildMap(); buildLive(); drawMap();
+  if (S.song.setup_note) {          // what automatic setup did when this song was added (shown once)
+    showBestPanel("Set up for you when you added it", S.song.setup_note.changes, S.song.setup_note.previous);
+    S.song.setup_note = null;
+  }
+}
+
+function renderStatus() {
+  const el = $("#statusLine"); if (!el || !S.song) return;
+  const st = S.status, here = st.key === S.selected;
+  let tone = "idle", text = "Ready. Press Play, then click into Roblox.";
+  if (here) {
+    if (st.state === "waiting") { tone = "wait"; text = "Click into the Roblox window to start."; }
+    else if (st.state === "countdown") { tone = "wait"; text = `Starting in <span class="count">${st.count}</span>`; }
+    else if (st.state === "playing") { tone = "live"; text = "Playing in Roblox." + (S.song.settings.loop_mode !== "off" ? ` Looping${st.loops ? `, ${st.loops} ${st.loops === 1 ? "time" : "times"} so far` : ""}.` : ""); }
+    else if (st.state === "paused") {
+      tone = "wait";
+      text = st.reason === "focus" ? "Paused because Roblox isn't the active window. Click back into Roblox."
+        : st.reason === "resuming" ? "Resuming…"
+        : `Paused. Press Resume${S.app?.hotkeys?.play_pause ? ` or ${keyName(S.app.hotkeys.play_pause)}` : ""} to continue.`;
+    }
+    else if (st.state === "finished") {
+      text = "Finished." + (st.mistakes ? ` It made ${st.mistakes} ${st.mistakes === 1 ? "mistake" : "mistakes"} on purpose.` : "") + (st.timing ? ` ${esc(st.timing)}` : "");
+    }
+    else if (st.state === "stopped") { text = "Stopped."; }
+    else if (st.state === "error") { tone = "bad"; text = esc(st.reason || "Playback stopped because of an error."); }
+  } else if (ACTIVE.has(st.state)) {
+    const other = S.songs.find(s => s.key === st.key);
+    text = `Now playing: ${esc(other ? other.title : "another song")}. Press Play to switch to this one.`;
+  }
+  if (S.queue.length) {
+    const nx = S.songs.find(x => x.key === S.queue[0]);
+    text += ` <span class="note" style="margin:0 0 0 6px">Up next: ${esc(nx ? nx.title : S.queue[0])}</span>`;
+  }
+  el.dataset.tone = tone;
+  el.innerHTML = `<span class="dot"></span><span>${text}</span>`;
+}
+
+function renderTransport() {
+  const btn = $("#playBtn"); if (!btn) return;
+  const here = isActiveHere(), st = S.status;
+  let mode = "play";
+  if (here && st.state === "paused" && st.reason === "manual") mode = "resume";
+  else if (here) mode = "pause";
+  btn.dataset.mode = mode;
+  const icons = {
+    play: `<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>`,
+    resume: `<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>`,
+    pause: `<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>`,
+  };
+  const labels = { play: "Play", resume: "Resume", pause: "Pause" };
+  btn.innerHTML = icons[mode]; btn.setAttribute("aria-label", labels[mode]); btn.title = `${labels[mode]} (Space)`;
+  $("#stopBtn").disabled = !here;
+}
+
+function renderControls() {
+  if (!S.song) return;
+  const cfg = S.song.settings, m = S.song.meta;
+  const sp = $("#speed"); sp.value = cfg.speed;
+  updateSpeedUI(cfg.speed);
+  $("#trVal").textContent = cfg.transpose > 0 ? `+${cfg.transpose}` : String(cfg.transpose);
+  const outside = outsideCount();
+  const tn = $("#trNote");
+  tn.className = "note" + (outside ? " warn" : "");
+  tn.textContent = outside ? `${outside} ${outside === 1 ? "note is" : "notes are"} outside the piano's range. Best fit can help.`
+    : "Every note fits on the piano.";
+  const tr = $("#tracks");
+  tr.innerHTML = m.tracks.map(t => {
+    const on = cfg.tracks.includes(t.number);
+    return `<label class="track${t.drums ? " disabled" : ""}"><input type="checkbox" data-track="${t.number}" ${on ? "checked" : ""} ${t.drums ? "disabled" : ""}>
+      <span class="t-name">${esc(t.name)}</span><span class="t-info">${t.drums ? "drums, not played" : `${t.notes.toLocaleString()} notes, ${esc(t.low)} to ${esc(t.high)}`}</span></label>`;
+  }).join("");
+  $("#tracksNote").textContent = cfg.tracks.length ? "" : "No tracks selected, so there's nothing to play.";
+  document.querySelectorAll(".seg[data-setting]").forEach(seg => {
+    seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.value === String(cfg[seg.dataset.setting]))));
+  });
+  renderHuman();
+  $("#maxNotes").value = String(cfg.max_notes);
+  $("#cleanup").checked = !!cfg.cleanup;
+  renderReport();
+  const changed = hiddenChanges(), tag = $("#moreTag");
+  if (tag) { tag.hidden = !changed.length; tag.textContent = `${changed.length} changed`; tag.title = `Changed: ${changed.join(", ")}`; }
+}
+// Settings inside "More controls" that aren't at their usual value, so a closed dropdown never hides a surprise.
+function hiddenChanges() {
+  const cfg = S.song.settings, out = [];
+  if (cfg.transpose) out.push("Transpose");
+  const all = S.song.meta.tracks.filter(t => !t.drums).map(t => t.number);
+  if (all.length !== cfg.tracks.length || all.some(t => !cfg.tracks.includes(t))) out.push("Tracks");
+  if (!allPresets().some(p => p.feel === cfg.feel && p.mistakes === cfg.mistakes)) out.push("Feel and Mistakes");
+  if (cfg.lock_take) out.push("Locked take");
+  if (cfg.range_mode !== "octave") out.push("Notes outside the piano");
+  if (cfg.max_notes) out.push("Keys at once");
+  if (cfg.note_style !== "real") out.push("Note length");
+  if (!cfg.cleanup) out.push("Cleanup");
+  return out;
+}
+
+const FEEL_WORDS = [[0, "Machine-perfect"], [25, "Tight"], [55, "Natural"], [80, "Relaxed"], [101, "Loose"]];
+const MISTAKE_WORDS = [[0, "None"], [10, "Rare"], [30, "Some"], [60, "Frequent"], [101, "Lots"]];
+function wordFor(v, table) { for (const [lim, w] of table) if (v <= lim) return w; return table[table.length - 1][1]; }
+function allPresets() { return (S.song?.presets || []).concat((S.app?.presets || []).map(p => Object.assign({ custom: true }, p))); }
+function renderHuman() {
+  const cfg = S.song.settings;
+  $("#feel").value = cfg.feel; $("#mistakes").value = cfg.mistakes;
+  updateHumanWords();
+  const match = allPresets().find(p => p.feel === cfg.feel && p.mistakes === cfg.mistakes);
+  $("#presets").innerHTML = allPresets().map(p => `<button class="preset" data-feel="${p.feel}" data-mistakes="${p.mistakes}" aria-pressed="${match && match.name === p.name}">
+      ${esc(p.name)}${p.custom ? `<span class="x" data-delete="${esc(p.name)}" role="button" aria-label="Delete preset ${esc(p.name)}" title="Delete">✕</span>` : ""}</button>`).join("")
+    + (match ? "" : `<span class="inline-form" id="saveForm"><button class="link-btn" id="savePreset">Save as preset</button></span>`);
+  $("#presetNote").textContent = match ? (match.custom ? "Your preset." : {
+    Perfect: "Every note exactly on time, no mistakes.", Pro: "A skilled player: tight, with a rare slip.",
+    Casual: "Relaxed timing and a few mistakes.", Beginner: "Looser timing and noticeable mistakes." }[match.name] || "") : "Custom mix. Save it as a preset to use it on other songs.";
+  const human = cfg.feel || cfg.mistakes;
+  $("#lockTake").checked = !!cfg.lock_take; $("#lockTake").disabled = !human;
+  $("#takeNote").textContent = !human ? "With Perfect, every play is the same." : cfg.lock_take ? "Every play repeats the locked take. Untick to get a new one each time."
+    : "Each play is a little different. Lock to keep repeating the most recent take.";
+}
+function updateHumanWords() {
+  const cfg = S.song.settings, r = S.song.report || {};
+  $("#feelVal").textContent = cfg.feel; $("#feelWord").textContent = wordFor(cfg.feel, FEEL_WORDS);
+  $("#mistakesVal").textContent = cfg.mistakes; $("#mistakesWord").textContent = wordFor(cfg.mistakes, MISTAKE_WORDS);
+  $("#feel").style.setProperty("--fill", `${cfg.feel}%`); $("#mistakes").style.setProperty("--fill", `${cfg.mistakes}%`);
+  $("#mistakesNote").textContent = !cfg.mistakes ? "No mistakes." : r.expected_mistakes != null
+    ? `About ${Math.round(r.expected_mistakes)} slips in this song, more in the fast parts.` : "Slips happen more in the fast parts.";
+}
+async function savePresetFlow() {
+  const form = $("#saveForm");
+  form.innerHTML = `<input id="presetName" maxlength="24" placeholder="Preset name" aria-label="Preset name"><button class="btn" id="presetOk">Save</button><button class="link-btn" id="presetCancel">Cancel</button>`;
+  const input = $("#presetName"); input.focus();
+  const done = async ok => {
+    const name = input.value.trim();
+    if (ok && name) {
+      const list = (S.app.presets || []).filter(p => p.name.toLowerCase() !== name.toLowerCase());
+      list.push({ name, feel: S.song.settings.feel, mistakes: S.song.settings.mistakes });
+      try { S.app = (await api("POST", "/api/app-settings", { presets: list })).player; toast(`Saved “${name}”.`); }
+      catch (e) { toast(e.message, true); }
+    }
+    renderHuman();
+  };
+  $("#presetOk").addEventListener("click", () => done(true));
+  $("#presetCancel").addEventListener("click", () => done(false));
+  input.addEventListener("keydown", e => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+}
+
+function renderReport() {
+  if (!S.song || !$("#pedalNote")) return;
+  const cfg = S.song.settings, r = S.song.report || {}, app = S.app || {};
+  const songPedal = r.song_pedal || 0;
+  let pedal = "";
+  if (S.song.from_audio && cfg.pedal_mode === "off") pedal = "Made from a recording, so the pedal is already built into how long each note is held. No pedal needed.";
+  else if (S.song.from_audio && cfg.pedal_mode === "song") pedal = "Made from a recording: the pedal is already built into the note lengths, so this adds extra blur. Off usually sounds cleaner.";
+  else if (cfg.pedal_mode === "off") pedal = songPedal ? `This song has ${songPedal} pedal presses. Choose From the song to use them.` : "No pedal.";
+  else if (cfg.pedal_mode === "song") pedal = songPedal ? `Follows the song's ${songPedal} pedal presses.` : "This song has no pedal data. Try Auto.";
+  else if (cfg.pedal_mode === "auto") { const n = r.pedal_presses || 0; pedal = `Presses the pedal ${n} ${n === 1 ? "time" : "times"}, lifting at each chord change and in rests.`; }
+  else pedal = "Pedal held down for the whole song.";
+  if (cfg.pedal_mode !== "off") pedal += app.pedal_method === "notes" ? " Your piano is set to hold notes instead of using a pedal (Settings)."
+    : app.pedal_method === "tap" ? " Space is tapped on and off (Settings)." : " Holds Space (Settings).";
+  $("#pedalNote").textContent = pedal;
+  const moved = r.moved || 0, skipped = r.skipped || 0;
+  $("#rangeNote").textContent = cfg.range_mode === "88" ? "Only for pianos that play the extra low and high notes with Ctrl. Others will ignore them."
+    : cfg.range_mode === "skip" ? (skipped ? `${skipped} notes are left out.` : "Every note fits, so nothing is skipped.")
+    : (moved ? `${moved} notes are moved by an octave to fit.` : "Every note fits, so nothing is moved.");
+  $("#maxNote").textContent = cfg.max_notes ? (r.thinned ? `${r.thinned} notes left out of big chords. The melody and bass are always kept.` : "No chord is that big, so nothing is left out.")
+    : "Use a limit if huge chords sound messy.";
+  $("#styleNote").textContent = cfg.note_style === "short" ? "Every key is tapped quickly." : cfg.note_style === "legato" ? "Keys stay down until the next note, for a smoother sound." : "Keys are held for each note's real length.";
+  $("#loopNote").textContent = cfg.loop_mode === "song" ? "Starts again from the beginning each time it ends."
+    : cfg.loop_mode === "ab" ? `Repeats ${fmt(cfg.loop_a)} to ${fmt(cfg.loop_b)}. Move the playhead and press Set A or Set B to change it.`
+    : "Plays once. Set A and B to repeat a section.";
+  $("#cleanNote").textContent = cfg.cleanup ? (r.cleaned ? `${r.cleaned} duplicate or glitch notes cleaned up.` : "Nothing needed cleaning.") : "Plays the file exactly as it is.";
+}
+
+function updateSpeedUI(v) {
+  const sp = $("#speed"); if (!sp) return;
+  sp.style.setProperty("--fill", `${((v - 0.25) / 1.75) * 100}%`);
+  $("#speedVal").textContent = `${Number(v).toFixed(2)}×`;
+  document.querySelectorAll(".chip[data-speed]").forEach(c => c.setAttribute("aria-pressed", String(Math.abs(+c.dataset.speed - v) < 0.001)));
+  $("#speedNote").textContent = Math.abs(v - 1) < 0.001 ? "Original speed." : `Plays in ${fmt(songDuration() / v)} instead of ${fmt(songDuration())}.`;
+}
+
+function pianoRange() { return S.song.settings.range_mode === "88" && S.song.standard !== false ? S.song.range88 : S.song.range; }
+function outsideCount() {
+  if (!S.song) return 0;
+  const [lo, hi] = pianoRange(), cfg = S.song.settings, set = new Set(cfg.tracks);
+  return S.song.notes.reduce((n, x) => n + (set.has(x[3]) && (x[2] + cfg.transpose < lo || x[2] + cfg.transpose > hi) ? 1 : 0), 0);
+}
+
+// Only what changed is sent. Every answer carries the server's change number (rev), so an answer that arrives
+// late can never undo something newer, and changes still on their way are laid back on top.
+let songPend = null, songFlying = null;
+const sendSong = debounce(async pend => {
+  if (songPend === pend) songPend = null;
+  songFlying = pend;
+  let d = null;
+  try { d = await api("POST", "/api/song/settings", Object.assign({ key: pend.key }, pend.values)); }
+  catch (e) { toast(e.message, true); }
+  finally { if (songFlying === pend) songFlying = null; }
+  if (d) applyServerSettings(pend.key, d.settings, d.rev, d.report);
+}, 220);
+function saveSettings(key, patch) {
+  if (songPend && songPend.key !== key) sendSong.flush();       // another song's change goes first
+  songPend = { key, values: Object.assign({}, songPend && songPend.key === key ? songPend.values : {}, patch) };
+  sendSong(songPend);
+}
+function unsaved(key) {
+  return Object.assign({}, songFlying && songFlying.key === key ? songFlying.values : {},
+    songPend && songPend.key === key ? songPend.values : {});
+}
+function applyServerSettings(key, settings, rev, report) {
+  if (!songReady() || S.song.meta.key !== key || (rev || 0) < (S.song.rev || 0)) return false;
+  S.song.rev = rev || 0;
+  S.song.settings = Object.assign({}, settings, unsaved(key));
+  if (report) S.song.report = report;
+  renderControls(); buildMap(); buildLive(); drawMap();
+  return true;
+}
+function changeSettings(patch) {
+  if (!songReady()) return;
+  Object.assign(S.song.settings, patch);
+  renderControls(); buildMap(); buildLive(); drawMap();
+  saveSettings(S.song.meta.key, patch);
+}
+
+function wireStage() {
+  $("#playBtn").addEventListener("click", onPlayButton);
+  $("#stopBtn").addEventListener("click", async () => {
+    S.status.userStop = true; S.localPos = 0;
+    try { await api("POST", "/api/stop"); } catch (e) { toast(e.message, true); }
+  });
+  $("#speed").addEventListener("input", e => { const v = +e.target.value; S.song.settings.speed = v; updateSpeedUI(v); });
+  $("#speed").addEventListener("change", e => changeSettings({ speed: +e.target.value }));
+  document.querySelectorAll(".chip[data-speed]").forEach(c => c.addEventListener("click", () => changeSettings({ speed: +c.dataset.speed })));
+  $("#trDown").addEventListener("click", () => changeSettings({ transpose: Math.max(-12, S.song.settings.transpose - 1) }));
+  $("#trUp").addEventListener("click", () => changeSettings({ transpose: Math.min(12, S.song.settings.transpose + 1) }));
+  $("#trReset").addEventListener("click", () => changeSettings({ transpose: 0 }));
+  $("#bestFit").addEventListener("click", async () => {
+    try {
+      const key = stageKey(); if (!key) return;
+      await saveSettingsNow();
+      const before = S.song.settings.transpose;
+      const d = await api("POST", "/api/song/best-fit", { key });
+      if (stageKey() !== key) return;
+      changeSettings({ transpose: d.transpose });
+      const label = `${d.transpose > 0 ? "+" : ""}${d.transpose}`;
+      toast(d.transpose === before ? `Already at the best fit (${label}).` : d.transpose === 0 ? "Back to the original key, which fits best." : `Transposed ${label}.`);
+    } catch (e) { toast(e.message, true); }
+  });
+  document.querySelectorAll(".seg[data-setting]").forEach(seg => seg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    changeSettings({ [seg.dataset.setting]: b.dataset.value });
+  }));
+  $("#maxNotes").addEventListener("change", e => changeSettings({ max_notes: +e.target.value }));
+  $("#presets").addEventListener("click", async e => {
+    const del = e.target.closest("[data-delete]");
+    if (del) {
+      e.stopPropagation();
+      const list = (S.app.presets || []).filter(p => p.name !== del.dataset.delete);
+      try { S.app = (await api("POST", "/api/app-settings", { presets: list })).player; renderHuman(); } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (e.target.closest("#savePreset")) { savePresetFlow(); return; }
+    const b = e.target.closest(".preset"); if (!b) return;
+    changeSettings({ feel: +b.dataset.feel, mistakes: +b.dataset.mistakes });
+  });
+  for (const id of ["feel", "mistakes"]) {
+    $("#" + id).addEventListener("input", e => { S.song.settings[id] = +e.target.value; updateHumanWords(); });
+    $("#" + id).addEventListener("change", e => changeSettings({ [id]: +e.target.value }));
+  }
+  $("#lockTake").addEventListener("change", e => changeSettings({ lock_take: e.target.checked }));
+  $("#setA").addEventListener("click", () => {
+    const cfg = S.song.settings, dur = songDuration(), a = Math.round(currentPos() * 10) / 10;
+    let b = cfg.loop_mode === "ab" ? cfg.loop_b : dur;
+    if (b <= a + 0.3) b = Math.min(dur, a + 10);
+    changeSettings({ loop_mode: "ab", loop_a: a, loop_b: b });
+  });
+  $("#setB").addEventListener("click", () => {
+    const cfg = S.song.settings, b = Math.round(currentPos() * 10) / 10;
+    let a = cfg.loop_mode === "ab" ? cfg.loop_a : 0;
+    if (b <= a + 0.3) a = Math.max(0, b - 10);
+    changeSettings({ loop_mode: "ab", loop_a: a, loop_b: b });
+  });
+  $("#miniBtn").addEventListener("click", () => api("POST", "/api/mini").catch(err => toast(err.message, true)));
+  $("#more").addEventListener("toggle", e => {
+    if (S.ui.more_open === e.target.open) return;
+    S.ui.more_open = e.target.open;
+    api("POST", "/api/ui", { more_open: e.target.open }).catch(() => {});
+  });
+  $("#bestPanel").addEventListener("click", e => {
+    if (e.target.closest("#bestHide")) { $("#bestPanel").hidden = true; return; }
+    if (e.target.closest("#bestUndo") && S.bestUndo) {
+      const u = S.bestUndo, patch = {};
+      for (const k of Object.keys(u.before)) if (same(S.song.settings[k], u.after[k])) patch[k] = u.before[k];
+      S.bestUndo = null; $("#bestPanel").hidden = true;
+      if (Object.keys(patch).length) { changeSettings(patch); toast("Back to how it was."); }
+      else toast("Nothing to undo: you've changed those settings yourself since.");
+      const b = document.querySelector('[data-act="best"]'); if (b) b.focus();   // focus doesn't fall off the page
+    }
+  });
+  const lt = $("#liveToggle"); lt.checked = recall("live", "1") === "1";
+  $("#live").hidden = !lt.checked;
+  lt.addEventListener("change", () => { store("live", lt.checked ? "1" : "0"); $("#live").hidden = !lt.checked; buildLive(); drawLive(); });
+  $("#songActions").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.act === "best") { bestForSong(); return; }
+    const key = stageKey(); if (!key) return;      // the song on screen, not one still loading
+    if (b.dataset.act === "fav") setFavorite(key, b.getAttribute("aria-pressed") !== "true");
+    if (b.dataset.act === "queue") queueAction("add", key);
+    if (b.dataset.act === "next") queueAction("next", key);
+    if (b.dataset.act === "delete") askDelete(key);
+  });
+  new ResizeObserver(() => { buildLive(); drawLive(); }).observe($("#live"));
+  $("#cleanup").addEventListener("change", e => changeSettings({ cleanup: e.target.checked }));
+  $("#tracks").addEventListener("change", e => {
+    const boxes = [...document.querySelectorAll("#tracks input:checked")].map(b => +b.dataset.track);
+    changeSettings({ tracks: boxes });
+  });
+  const map = $("#map");
+  const posFromEvent = e => { const r = map.getBoundingClientRect(); return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * songDuration(); };
+  map.addEventListener("pointerdown", e => { map.setPointerCapture(e.pointerId); S.drag = { pos: posFromEvent(e) }; drawMap(); });
+  map.addEventListener("pointermove", e => { if (S.drag) { S.drag.pos = posFromEvent(e); drawMap(); } });
+  const finish = async () => {
+    if (!S.drag) return;
+    const pos = S.drag.pos; S.drag = null;
+    if (isActiveHere()) {
+      S.status.pos = pos; S.statusAt = performance.now();
+      try { await api("POST", "/api/seek", { pos }); } catch (e) { toast(e.message, true); }
+    } else S.localPos = pos;
+    drawMap();
+  };
+  map.addEventListener("pointerup", finish);
+  map.addEventListener("pointercancel", () => { S.drag = null; drawMap(); });
+  map.addEventListener("keydown", async e => {
+    const step = e.key === "ArrowRight" ? 5 : e.key === "ArrowLeft" ? -5 : e.key === "Home" ? -1e9 : null;
+    if (step === null) return;
+    e.preventDefault();
+    const pos = Math.min(songDuration(), Math.max(0, currentPos() + step));
+    if (isActiveHere()) { S.status.pos = pos; S.statusAt = performance.now(); api("POST", "/api/seek", { pos }).catch(err => toast(err.message, true)); }
+    else S.localPos = pos;
+    drawMap();
+  });
+  new ResizeObserver(() => { buildMap(); drawMap(); }).observe(map);
+}
+async function saveSettingsNow() {
+  await sendSong.flush();              // a change from a moment ago is saved before anything reads the settings
+}
+
+let playBusy = false;
+async function onPlayButton() {
+  if (playBusy) return;
+  playBusy = true;
+  const mode = $("#playBtn").dataset.mode;
+  try {
+    if (mode === "play") {
+      if (S.loading) await S.loading;          // a song just picked: wait until it's on screen
+      const key = stageKey(); if (!key) return;
+      if (!S.song.settings.tracks.length) { toast("Pick at least one track to play.", true); return; }
+      await saveSettingsNow();
+      let start = S.localPos; if (start >= songDuration() - 0.05) start = 0;
+      const before = S.status, waiting = { state: "waiting", key, pos: start, total: songDuration() };
+      S.status = waiting;
+      renderTransport(); renderStatus();
+      try { await api("POST", "/api/play", { key, start }); }
+      catch (e) { if (S.status === waiting) { S.status = before; renderTransport(); renderStatus(); } throw e; }
+    } else if (mode === "pause") await api("POST", "/api/pause");
+    else await api("POST", "/api/resume");
+  } catch (e) { toast(e.message, true); }
+  finally { playBusy = false; }
+}
+
+// ---------- song map ----------
+let mapLayers = null;
+function buildMap() {
+  const c = $("#map"); if (!c || !S.song) return;
+  const dpr = window.devicePixelRatio || 1, w = Math.max(10, c.clientWidth), h = Math.max(10, c.clientHeight);
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const notes = S.song.notes, cfg = S.song.settings, set = new Set(cfg.tracks), [lo, hi] = pianoRange();
+  const dur = Math.max(0.001, songDuration());
+  let pmin = 127, pmax = 0;
+  for (const n of notes) { pmin = Math.min(pmin, n[2]); pmax = Math.max(pmax, n[2]); }
+  if (pmin > pmax) { pmin = 48; pmax = 84; }
+  pmin -= 2; pmax += 2;
+  const pad = 10 * dpr, W = c.width, H = c.height - pad * 2;
+  const rowH = Math.max(1.5 * dpr, Math.min(5 * dpr, H / (pmax - pmin + 1)));
+  const y = p => pad + (1 - (p - pmin) / (pmax - pmin)) * (H - rowH);
+  const make = (colorOn, colorOff, colorOut) => {
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = c.height;
+    const g = cv.getContext("2d");
+    // the piano's range, shaded
+    const top = y(Math.min(pmax, hi - cfg.transpose)), bot = y(Math.max(pmin, lo - cfg.transpose)) + rowH;
+    g.fillStyle = "rgba(238,230,211,0.035)"; g.fillRect(0, Math.min(top, bot), W, Math.abs(bot - top));
+    for (const n of notes) {
+      const x0 = n[0] / dur * W, x1 = Math.max(x0 + 1.5 * dpr, n[1] / dur * W);
+      const shifted = n[2] + cfg.transpose;
+      g.fillStyle = !set.has(n[3]) ? colorOff : (shifted < lo || shifted > hi) ? colorOut : colorOn;
+      g.fillRect(x0, y(n[2]), x1 - x0, rowH);
+    }
+    return cv;
+  };
+  mapLayers = { dpr, ahead: make("rgba(238,230,211,0.55)", "rgba(238,230,211,0.10)", "rgba(224,138,138,0.75)"),
+    played: make("#D3A54A", "rgba(211,165,74,0.16)", "#E08A8A") };
+  const outside = outsideCount(), legend = $("#legend");
+  const fate = cfg.range_mode === "skip" ? "are skipped" : "move by an octave";
+  if (legend) legend.innerHTML = outside ? `<span class="warn">Red notes</span> are outside the piano and ${fate}. Click or drag here to jump.` : "Click or drag here to jump to any part.";
+}
+function drawMap() {
+  const c = $("#map"); if (!c || !S.song || !mapLayers) return;
+  const g = c.getContext("2d"), W = c.width, H = c.height, dpr = mapLayers.dpr;
+  const dur = Math.max(0.001, songDuration()), pos = Math.min(dur, currentPos()), x = pos / dur * W;
+  g.clearRect(0, 0, W, H);
+  g.drawImage(mapLayers.ahead, 0, 0);
+  if (x > 0) g.drawImage(mapLayers.played, 0, 0, x, H, 0, 0, x, H);
+  const cfg = S.song.settings;
+  if (cfg.loop_mode === "ab") {
+    const xa = cfg.loop_a / dur * W, xb = cfg.loop_b / dur * W;
+    g.fillStyle = "rgba(211,165,74,0.10)"; g.fillRect(xa, 0, xb - xa, H);
+    g.fillStyle = "#D3A54A"; g.fillRect(xa, 0, 1.5 * dpr, H); g.fillRect(xb - 1.5 * dpr, 0, 1.5 * dpr, H);
+    g.font = `600 ${11 * dpr}px "Instrument Sans", sans-serif`; g.textBaseline = "bottom";
+    g.fillText("A", xa + 4 * dpr, H - 4 * dpr); g.fillText("B", Math.max(xa + 16 * dpr, xb - 12 * dpr), H - 4 * dpr);
+  }
+  g.fillStyle = "#EEE6D3"; g.fillRect(Math.round(x - dpr), 0, 2 * dpr, H);
+  g.fillStyle = "#D3A54A"; g.beginPath(); g.arc(Math.min(W - 5 * dpr, Math.max(5 * dpr, x)), 6 * dpr, 5 * dpr, 0, Math.PI * 2); g.fill();
+  $("#tNow").textContent = fmt(pos);
+  c.setAttribute("aria-valuemax", String(Math.round(dur))); c.setAttribute("aria-valuenow", String(Math.round(pos)));
+  c.setAttribute("aria-valuetext", `${fmt(pos)} of ${fmt(dur)}`);
+  drawLive();
+}
+
+// ---------- live keyboard ----------
+const LAYOUT = "1!2@34$5%6^78*9(0qQwWeErtTyYuiIoOpPasSdDfgGhHjJklLzZxcCvVbBnm";
+const LOW88 = "1234567890qwert", HIGH88 = "yuiopasdfghj";
+const isBlack = p => [1, 3, 6, 8, 10].includes(((p % 12) + 12) % 12);
+function mapPitch(p, mode) {
+  const std = !S.song || S.song.standard !== false;
+  const [lo, hi] = mode === "88" && std ? [21, 108] : S.song ? S.song.range : [36, 96];
+  if (p >= lo && p <= hi) return p;
+  if (mode === "skip") return null;
+  while (p < lo) p += 12;
+  while (p > hi) p -= 12;
+  return p;
+}
+function keyLabel(p) {
+  const layout = (S.song && S.song.layout) || LAYOUT, lo = S.song ? S.song.range[0] : 36;
+  if (S.song && S.song.standard !== false) {
+    if (p < 36) return "~" + LOW88[p - 21];      // same mark as text sheets use
+    if (p > 96) return "~" + HIGH88[p - 97];
+  }
+  return layout[p - lo] || "";
+}
+let live = null;
+function buildLive() {
+  const c = $("#live"); if (!c || c.hidden || !S.song) { live = null; return; }
+  const dpr = window.devicePixelRatio || 1;
+  c.width = Math.round(Math.max(10, c.clientWidth) * dpr); c.height = Math.round(Math.max(10, c.clientHeight) * dpr);
+  const cfg = S.song.settings, [lo, hi] = pianoRange(), set = new Set(cfg.tracks);
+  const whites = []; for (let p = lo; p <= hi; p++) if (!isBlack(p)) whites.push(p);
+  const ww = c.width / whites.length, bw = ww * 0.62, geo = {};
+  let wi = 0;
+  for (let p = lo; p <= hi; p++) {
+    if (!isBlack(p)) { geo[p] = { x: wi * ww, w: ww, black: false }; wi++; }
+    else geo[p] = { x: wi * ww - bw / 2, w: bw, black: true };
+  }
+  const notes = [];
+  let maxDur = 0;
+  for (const n of S.song.notes) {
+    if (!set.has(n[3])) continue;
+    const p = mapPitch(n[2] + cfg.transpose, cfg.range_mode);
+    if (p === null || !geo[p]) continue;
+    notes.push([n[0], n[1], p]); maxDur = Math.max(maxDur, n[1] - n[0]);
+  }
+  notes.sort((a, b) => a[0] - b[0]);
+  live = { dpr, geo, lo, hi, notes, starts: notes.map(n => n[0]), maxDur, kbH: 56 * dpr };
+}
+function drawLive() {
+  const c = $("#live"); if (!c || c.hidden || !S.song) return;
+  if (!live) buildLive(); if (!live) return;
+  const g = c.getContext("2d"), W = c.width, H = c.height, { dpr, geo, lo, hi, notes, starts, maxDur, kbH } = live;
+  const rollH = H - kbH, now = currentPos(), look = 3 * (S.song.settings.speed || 1);
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = "rgba(238,230,211,0.05)";
+  for (let p = lo; p <= hi; p++) if (p % 12 === 0 && geo[p]) g.fillRect(geo[p].x, 0, dpr, rollH);
+  let i = 0, j = starts.length;
+  while (i < j) { const m = (i + j) >> 1; if (starts[m] < now - maxDur - 0.01) i = m + 1; else j = m; }
+  const active = new Set();
+  for (; i < notes.length && notes[i][0] < now + look; i++) {
+    const [st, en, p] = notes[i];
+    if (en <= now) continue;
+    const on = st <= now;
+    if (on) active.add(p);
+    const k = geo[p], y1 = rollH - (st - now) / look * rollH, y0 = rollH - (en - now) / look * rollH;
+    const top = Math.max(0, y0), bottom = Math.min(rollH, y1);
+    if (bottom - top < 1) continue;
+    g.fillStyle = on ? "#D3A54A" : k.black ? "rgba(189,179,163,0.55)" : "rgba(238,230,211,0.62)";
+    const pad = k.black ? 1 * dpr : 2 * dpr;
+    g.fillRect(k.x + pad, top, Math.max(2, k.w - pad * 2), Math.max(2 * dpr, bottom - top - 1 * dpr));
+  }
+  // keyboard
+  g.fillStyle = "#120E18"; g.fillRect(0, rollH, W, kbH);
+  g.font = `500 ${9.5 * dpr}px "Instrument Sans", sans-serif`; g.textAlign = "center"; g.textBaseline = "bottom";
+  for (let p = lo; p <= hi; p++) {
+    const k = geo[p]; if (k.black) continue;
+    g.fillStyle = active.has(p) ? "#D3A54A" : "#EEE6D3";
+    g.fillRect(k.x + 0.5 * dpr, rollH + 2 * dpr, k.w - 1 * dpr, kbH - 3 * dpr);
+    if (k.w > 9 * dpr) { g.fillStyle = active.has(p) ? "#241A0A" : "#8C8296"; g.fillText(keyLabel(p), k.x + k.w / 2, H - 4 * dpr); }
+  }
+  for (let p = lo; p <= hi; p++) {
+    const k = geo[p]; if (!k.black) continue;
+    g.fillStyle = active.has(p) ? "#E6BE68" : "#2A2236";
+    g.fillRect(k.x, rollH + 2 * dpr, k.w, kbH * 0.58);
+  }
+  g.fillStyle = "#D3A54A"; g.fillRect(0, rollH, W, 1.5 * dpr);
+}
+function renderSongActions() {
+  const box = $("#songActions"); if (!box || !S.song) return;
+  const entry = S.songs.find(s => s.key === S.song.meta.key) || {};
+  box.innerHTML = `<button class="btn best" data-act="best" title="Pick the settings that suit this song. Speed and Play like stay yours."><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" fill="currentColor"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" fill="currentColor"/></svg>Best for this song</button>
+    <button class="btn" data-act="fav" aria-pressed="${!!entry.favorite}">${entry.favorite ? "★ Favorite" : "☆ Favorite"}</button>
+    <button class="btn" data-act="queue">Add to queue</button><button class="btn" data-act="next">Play next</button>
+    <button class="btn del" data-act="delete" title="Delete this song. It goes to the Recycle Bin, so you can get it back."><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zM6 9h12l-1 11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" fill="currentColor"/></svg>Delete</button>`;
+}
+const HOTKEY_NAMES = { PAGEUP: "Page Up", PAGEDOWN: "Page Down", HOME: "Home", END: "End", INSERT: "Insert", DELETE: "Delete", PAUSE: "Pause", SCROLLLOCK: "Scroll Lock" };
+const keyName = k => k ? (HOTKEY_NAMES[k] || k) : "Off";
+const HOTKEY_LABELS = { play_pause: "Play and pause", stop: "Stop", restart: "Back to the start", slower: "Slower", faster: "Faster", next: "Next song in the queue" };
+function renderHotkeyHint() {
+  const el = $("#hotkeyHint"); if (!el) return;
+  const h = (S.app && S.app.hotkeys) || { play_pause: "F6", stop: "F7" };
+  const parts = [];
+  if (h.play_pause) parts.push(`${keyName(h.play_pause)} plays and pauses`);
+  if (h.stop) parts.push(`${keyName(h.stop)} stops`);
+  el.textContent = parts.length ? `Inside Roblox, ${parts.join(" and ")}.` : "";
+}
+let animOn = false;
+function startAnim() {
+  if (animOn) return; animOn = true;
+  const tick = () => { drawMap(); if (S.status.state === "playing" || S.drag) requestAnimationFrame(tick); else { animOn = false; drawMap(); } };
+  requestAnimationFrame(tick);
+}
+
+// ---------- adding songs ----------
+const addDlg = $("#addDlg");
+function openAdd() { closeMenu(); $("#dropzone").classList.remove("over"); addDlg.showModal(); $("#dropzone").focus(); }
+$("#addBtn").addEventListener("click", openAdd);
+$("#addClose").addEventListener("click", () => addDlg.close());
+$("#dropzone").addEventListener("click", () => $("#anyInput").click());
+$("#dropzone").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#anyInput").click(); } });
+$("#addPaste").addEventListener("click", () => { addDlg.close(); openSheet(); });
+$("#addFolder").addEventListener("click", () => { addDlg.close(); $("#folderInput").click(); });
+$("#folderBtn").addEventListener("click", async () => {
+  try { const d = await api("POST", "/api/open-folder"); if (S.simulated) toast(`Songs folder: ${d.path}`); } catch (e) { toast(e.message, true); }
+});
+$("#anyInput").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; addFiles(files); });
+
+// Every way of adding files ends here: sort them by kind and send each kind where it goes.
+function addFiles(files, fromFolder = false) {
+  if (!files.length) return;
+  if (addDlg.open) addDlg.close();
+  const midis = files.filter(f => MIDI_EXT.includes(ext(f.name)));
+  const audio = files.filter(f => AUDIO_EXT.includes(ext(f.name)));
+  const sheets = fromFolder ? [] : files.filter(f => ext(f.name) === ".txt");
+  const other = files.length - midis.length - audio.length - sheets.length;
+  if (!midis.length && !audio.length && !sheets.length) {
+    toast(fromFolder ? "That folder has no MP3, video or MIDI files." : "PianoPilot can't use that file. Put in an MP3, a video, a MIDI file or a .txt piano sheet.", true);
+    return;
+  }
+  if (other && !fromFolder) toast(`${other} file${other > 1 ? "s" : ""} skipped. PianoPilot takes MP3, video, MIDI and .txt sheet files.`, true);
+  if (midis.length) addMidis(midis);
+  if (audio.length) importAudio(audio);
+  if (sheets.length) {
+    if (sheets.length > 1) toast("Text sheets open one at a time. Opening the first one.");
+    loadSheetFile(sheets[0], true);
+  }
+}
+
+async function addMidis(files) {
+  let last = null;
+  for (const f of files) {
+    try { const d = await api("POST", `/api/add-midi?name=${encodeURIComponent(f.name)}`, undefined, f); last = d.key; }
+    catch (e) { toast(e.message, true); }
+  }
+  if (last) { toast(files.length === 1 ? "Song added." : `${files.length} songs added.`); await loadLibrary(last); }
+}
+
+async function importAudio(files) {
+  if (!files.length) return;
+  const st = await api("GET", "/api/audio/status").catch(e => { toast(e.message, true); return null; });
+  if (!st) return;
+  if (!st.ready) { S.pendingAudio.push(...files); openSetup(st); return; }
+  let sent = 0;
+  for (const f of files) {
+    try { await api("POST", `/api/import-audio?name=${encodeURIComponent(f.name)}`, undefined, f); sent++; }
+    catch (e) { toast(e.message, e.status !== 409); }          // 409: already on its way, not a problem
+  }
+  if (sent) toast(sent === 1 ? "Turning it into a song. You can watch it on the left." : `Turning ${sent} recordings into songs, one at a time. You can watch them on the left.`);
+}
+
+function renderJobs() {
+  const box = $("#jobs");
+  box.innerHTML = S.jobs.map(j => {
+    const pct = j.total ? Math.round(j.done / j.total * 100) : 0;
+    const busy = j.state === "converting" || j.state === "queued";
+    const text = j.state === "error" ? esc(j.error || "Couldn't convert this file.")
+      : j.state === "done" ? `Added. Found ${Number(j.notes).toLocaleString()} notes${j.took ? ` in ${Math.round(j.took)} seconds` : ""}.`
+      : j.state === "cancelled" ? "Cancelled"
+      : j.state === "queued" ? "Waiting for the file before it" : `${esc(j.text)}${j.total ? `, ${pct}%` : ""}`;
+    return `<div class="job ${j.state}">
+      <div class="job-top"><span class="job-title" title="${esc(j.name)}">${esc(j.title)}</span>
+      ${busy ? `<button class="link-btn" data-cancel="${j.id}">Cancel</button>`
+        : `${j.state === "done" ? `<button class="link-btn" data-open="${esc(j.song)}">Open</button>` : ""}<button class="link-btn" data-dismiss="${j.id}" aria-label="Dismiss">✕</button>`}</div>
+      <div class="job-text">${text}</div>
+      ${busy ? `<div class="bar${j.total ? "" : " indeterminate"}"><i style="width:${pct}%"></i></div>` : ""}</div>`;
+  }).join("");
+}
+$("#jobs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.cancel) api("POST", "/api/jobs/cancel", { id: b.dataset.cancel }).catch(err => toast(err.message, true));
+  if (b.dataset.dismiss) api("POST", "/api/jobs/dismiss", { id: b.dataset.dismiss }).catch(err => toast(err.message, true));
+  if (b.dataset.open) selectSong(b.dataset.open);
+});
+
+// ---------- drag and drop ----------
+let dragDepth = 0;
+function dragTarget() { return addDlg.open ? $("#dropzone") : $("#drop"); }
+window.addEventListener("dragenter", e => {
+  if (![...e.dataTransfer.types].includes("Files")) return;
+  dragDepth++; dragTarget().classList.add(addDlg.open ? "over" : "on");
+});
+window.addEventListener("dragleave", () => {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) { $("#drop").classList.remove("on"); $("#dropzone").classList.remove("over"); }
+});
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", async e => {
+  e.preventDefault(); dragDepth = 0; $("#drop").classList.remove("on"); $("#dropzone").classList.remove("over");
+  if (![...e.dataTransfer.types].includes("Files")) return;
+  const dt = e.dataTransfer, plain = [...dt.files];
+  const hasFolder = [...dt.items].some(i => i.webkitGetAsEntry && i.webkitGetAsEntry()?.isDirectory);
+  const files = await filesFromDrop(dt).catch(() => plain);
+  addFiles(files, hasFolder);
+});
+
+// ---------- audio setup dialog ----------
+const dlg = $("#setup");
+let setupPoll;
+async function openSetup(st) {
+  if (!dlg.open) dlg.showModal();
+  renderSetup(st || await api("GET", "/api/audio/status?refresh=1").catch(() => null));
+}
+function renderSetup(st) {
+  if (!st) return;
+  const su = st.setup || {};
+  const deps = st.deps || {};
+  const modelText = st.model ? "Installed and verified."
+    : st.model_file ? `Found in your Downloads. It gets checked and installed when you click Set up.`
+    : `Not found. <a href="${esc(st.model_url)}" target="_blank" rel="noopener">Download PianoModel.pianoscribe</a> into your Downloads folder, or <button class="link-btn" id="pickModel" style="color:var(--brass-hi);padding:0">choose the file</button>.`;
+  const depsText = deps.ok ? `Installed${deps.gpu ? ", with graphics-card support" : ""}.`
+    : `Needs a one-time download of about 150 MB (numpy, scipy, ONNX Runtime, ffmpeg) for Python ${esc(deps.python || "")}.`;
+  $("#setupSteps").innerHTML = `
+    <li class="${st.model ? "ok" : ""}"><div><strong>Piano model</strong><div class="s-text">${modelText}</div></div></li>
+    <li class="${deps.ok ? "ok" : ""}"><div><strong>AI libraries for Python</strong><div class="s-text">${depsText}</div></div></li>`;
+  const pm = $("#pickModel"); if (pm) pm.addEventListener("click", () => $("#modelInput").click());
+  const err = $("#setupError");
+  err.hidden = !su.error; err.textContent = su.error || "";
+  $("#setupPy").hidden = !(su.error && /Python 3\.13/.test(su.error));
+  const log = su.log || [];
+  $("#setupLogWrap").hidden = !log.length; $("#setupLog").textContent = log.join("\n");
+  $("#setupLog").scrollTop = 1e9;
+  $("#setupStep").textContent = su.running ? `${su.step}…` : st.ready ? "Audio import is ready." : "";
+  const go = $("#setupGo");
+  go.disabled = !!su.running;
+  go.textContent = st.ready ? (S.pendingAudio.length ? `Convert ${S.pendingAudio.length === 1 ? "my file" : `${S.pendingAudio.length} files`}` : "Done") : su.running ? "Setting up…" : "Set up";
+  S.audioReady = st.ready;
+  clearTimeout(setupPoll);
+  if (su.running) setupPoll = setTimeout(() => dlg.open && api("GET", "/api/audio/status").then(renderSetup).catch(() => {}), 1500);
+}
+$("#setupGo").addEventListener("click", async () => {
+  if (S.audioReady) {
+    dlg.close();
+    const files = S.pendingAudio.splice(0);
+    if (files.length) importAudio(files);
+    return;
+  }
+  try { await api("POST", "/api/audio/setup", {}); renderSetup(await api("GET", "/api/audio/status")); }
+  catch (e) { toast(e.message, true); }
+});
+$("#setupPy").addEventListener("click", async () => {
+  try { await api("POST", "/api/audio/setup", { python: "3.13" }); renderSetup(await api("GET", "/api/audio/status")); }
+  catch (e) { toast(e.message, true); }
+});
+$("#setupClose").addEventListener("click", () => dlg.close());
+$("#modelInput").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  $("#setupStep").textContent = "Checking the model file…";
+  try { await api("POST", "/api/audio/model-upload", undefined, f); toast("Piano model installed."); }
+  catch (err) { toast(err.message, true); }
+  renderSetup(await api("GET", "/api/audio/status?refresh=1").catch(() => null));
+});
+
+// ---------- song details and text sheets ----------
+function renderDetails() {
+  const box = $("#detailsBody"); if (!box || !S.song) return;
+  const d = S.song.details || {}, m = S.song.meta;
+  const tempo = d.bpm ? `${Math.round(d.bpm)} BPM${d.tempo_changes ? `, changes ${d.tempo_changes === 1 ? "once" : `${d.tempo_changes} times`}` : ""}` : "Not set in the file";
+  const hands = m.tracks.filter(t => !t.drums).map(t => {
+    const hand = (d.hands || {})[String(t.number)];
+    return /hand/i.test(t.name) || !hand ? esc(t.name) : `${esc(t.name)}, plays the ${esc(hand)}`;
+  }).join("<br>");
+  box.innerHTML = `<dl class="detail-grid"><dt>Tempo</dt><dd>${tempo}</dd><dt>Key</dt><dd>${esc(d.key || "Unclear")}</dd>
+    <dt>Tracks</dt><dd>${hands || "None"}</dd><dt>Notes</dt><dd>${m.notes.toLocaleString()}, ${m.pedals ? `${m.pedals} pedal events` : "no pedal events"}</dd></dl>
+    <div class="row"><button class="btn" id="copySheet">Copy as text sheet</button><button class="btn" id="saveSheet">Save text sheet</button>
+    <span class="note" style="margin:0">Uses this song's transpose and tracks.</span></div>`;
+  $("#copySheet").addEventListener("click", async () => {
+    try { const k = stageKey(); if (!k) return; const d2 = await api("GET", `/api/sheet/export?key=${encodeURIComponent(k)}`); await navigator.clipboard.writeText(d2.text); toast("Text sheet copied."); }
+    catch (e) { toast(e.message || "Couldn't copy.", true); }
+  });
+  $("#saveSheet").addEventListener("click", async () => {
+    try {
+      const k = stageKey(); if (!k) return;
+      const d2 = await api("GET", `/api/sheet/export?key=${encodeURIComponent(k)}`);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([d2.text], { type: "text/plain" }));
+      a.download = `${d2.title}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast("Text sheet saved to your Downloads.");
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+const sheetDlg = $("#sheetDlg");
+function openSheet() { closeMenu(); $("#sheetInfo").textContent = "Paste a sheet to see a preview."; sheetDlg.showModal(); $("#sheetText").focus(); previewSheet(); }
+const previewSheet = debounce(async () => {
+  const text = $("#sheetText").value, bpm = +$("#sheetBpm").value;
+  $("#sheetBpmVal").textContent = `${bpm} BPM`;
+  $("#sheetBpm").style.setProperty("--fill", `${(bpm - 40) / 260 * 100}%`);
+  if (!text.trim()) { $("#sheetSave").disabled = true; $("#sheetInfo").textContent = "Paste a sheet to see a preview."; drawSheetMap([]); return; }
+  try {
+    const d = await api("POST", "/api/sheet/preview", { text, bpm });
+    $("#sheetSave").disabled = !d.count;
+    const info = d.count ? `${d.count.toLocaleString()} notes, ${fmt(d.duration)} long.` : "No notes found yet.";
+    $("#sheetInfo").innerHTML = esc(info) + (d.problems.length ? ` <span style="color:var(--rose)">${esc(d.problems.join(" "))}</span>` : "");
+    drawSheetMap(d.notes);
+  } catch (e) { $("#sheetInfo").textContent = e.message; }
+}, 250);
+function drawSheetMap(notes) {
+  const c = $("#sheetMap"), dpr = window.devicePixelRatio || 1;
+  c.width = Math.round(c.clientWidth * dpr); c.height = Math.round(c.clientHeight * dpr);
+  const g = c.getContext("2d"); g.clearRect(0, 0, c.width, c.height);
+  if (!notes.length) return;
+  const end = Math.max(...notes.map(n => n[1])), lo = Math.min(...notes.map(n => n[2])) - 1, hi = Math.max(...notes.map(n => n[2])) + 1;
+  const pad = 6 * dpr, rowH = Math.max(1.5 * dpr, Math.min(4 * dpr, (c.height - 2 * pad) / (hi - lo + 1)));
+  g.fillStyle = "rgba(211,165,74,0.85)";
+  for (const [a, b, p] of notes) {
+    const x = a / end * c.width, w = Math.max(1.5 * dpr, (b - a) / end * c.width);
+    g.fillRect(x, pad + (1 - (p - lo) / (hi - lo)) * (c.height - 2 * pad - rowH), w, rowH);
+  }
+}
+$("#sheetText").addEventListener("input", previewSheet);
+$("#sheetBpm").addEventListener("input", previewSheet);
+$("#sheetCancel").addEventListener("click", () => sheetDlg.close());
+$("#sheetFileBtn").addEventListener("click", () => $("#sheetFile").click());
+async function loadSheetFile(f, fresh = false) {
+  let text;
+  try { text = await f.text(); } catch (e) { toast("Couldn't read that file.", true); return; }
+  if (fresh) { $("#sheetName").value = ""; if (!sheetDlg.open) openSheet(); }
+  $("#sheetText").value = text;
+  if (fresh || !$("#sheetName").value.trim()) $("#sheetName").value = f.name.replace(/\.txt$/i, "").slice(0, 80);
+  const m = text.match(/Tempo:\s*(\d+)/i); if (m) $("#sheetBpm").value = Math.min(300, Math.max(40, +m[1]));
+  previewSheet();
+}
+$("#sheetFile").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) loadSheetFile(f); });
+$("#sheetSave").addEventListener("click", async () => {
+  try {
+    const d = await api("POST", "/api/sheet/save", { text: $("#sheetText").value, bpm: +$("#sheetBpm").value, title: $("#sheetName").value || "Text sheet" });
+    sheetDlg.close(); $("#sheetText").value = ""; $("#sheetName").value = "";
+    toast("Sheet added to your songs."); await loadLibrary(d.key);
+  } catch (e) { toast(e.message, true); }
+});
+
+// ---------- more menu, folders ----------
+function closeMenu() { $("#moreMenu").hidden = true; $("#moreBtn").setAttribute("aria-expanded", "false"); }
+$("#moreBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const open = $("#moreMenu").hidden; $("#moreMenu").hidden = !open; $("#moreBtn").setAttribute("aria-expanded", String(open));
+  if (open) $("#moreMenu button").focus();
+});
+document.addEventListener("click", e => { if (!e.target.closest(".menu-wrap")) closeMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
+$("#pasteSheetBtn").addEventListener("click", openSheet);
+$("#importFolderBtn").addEventListener("click", () => { closeMenu(); $("#folderInput").click(); });
+$("#folderBtn").addEventListener("click", closeMenu);
+$("#folderInput").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; addFiles(files, true); });
+async function filesFromDrop(dt) {
+  const entries = [...dt.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (!entries.some(en => en.isDirectory)) return [...dt.files];
+  const out = [];
+  const walk = async entry => {
+    if (entry.isFile) { out.push(await new Promise((res, rej) => entry.file(res, rej))); return; }
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      if (!batch.length) break;
+      for (const child of batch) await walk(child);
+    }
+  };
+  for (const en of entries) await walk(en);
+  return out;
+}
+
+// ---------- calibration ----------
+const calDlg = $("#calDlg");
+const CAL = { parts: [], i: 0, played: false };
+async function openCalibration() {
+  setDlg.close();
+  try { CAL.parts = (await api("GET", "/api/calibrate/parts")).parts; } catch (e) { toast(e.message, true); return; }
+  CAL.i = 0; CAL.played = false; $("#calStatus").textContent = ""; renderCal(); calDlg.showModal();
+}
+calDlg.addEventListener("close", () => {
+  if (S.status.key === "__test__" && ACTIVE.has(S.status.state)) api("POST", "/api/stop").catch(() => {});
+});
+function renderCal(msg = "") {
+  const part = CAL.parts[CAL.i];
+  if (!part) {
+    $("#calProgress").textContent = "All tests done.";
+    $("#calPartTitle").textContent = "Finished";
+    $("#calQuestion").textContent = "Your settings are saved. You can run the test again any time from Settings.";
+    $("#calMsg").textContent = msg; ["#calPlay", "#calYes", "#calNo"].forEach(id => { $(id).hidden = true; });
+    return;
+  }
+  ["#calPlay", "#calYes", "#calNo"].forEach(id => { $(id).hidden = false; });
+  $("#calProgress").textContent = `Test ${CAL.i + 1} of ${CAL.parts.length}`;
+  $("#calPartTitle").textContent = part.title; $("#calQuestion").textContent = part.question; $("#calMsg").textContent = msg;
+  $("#calYes").disabled = $("#calNo").disabled = !CAL.played; $("#calPlay").textContent = CAL.played ? "Play again" : "Play test";
+}
+$("#calOpen").addEventListener("click", openCalibration);
+$("#calClose").addEventListener("click", () => { api("POST", "/api/stop").catch(() => {}); calDlg.close(); });
+$("#calPlay").addEventListener("click", async () => {
+  try { await api("POST", "/api/calibrate/play", { id: CAL.parts[CAL.i].id }); CAL.played = true; renderCal(); $("#calStatus").textContent = "Click into Roblox to hear it."; }
+  catch (e) { toast(e.message, true); }
+});
+async function answerCal(ok) {
+  try {
+    const d = await api("POST", "/api/calibrate/answer", { id: CAL.parts[CAL.i].id, ok });
+    if (d.changed) loadAppSettings();
+    if (d.retry) { CAL.played = false; renderCal(d.message); }
+    else { CAL.i++; CAL.played = false; renderCal(d.message); }
+  } catch (e) { toast(e.message, true); }
+}
+$("#calYes").addEventListener("click", () => answerCal(true));
+$("#calNo").addEventListener("click", () => answerCal(false));
+
+// ---------- app settings ----------
+const setDlg = $("#settings");
+async function loadAppSettings() {
+  try { const d = await api("GET", "/api/app-settings"); S.app = d.player; S.standardLayout = d.standard_layout; } catch (e) { S.app = { pedal_method: "hold", shift_gap_ms: 0, chord_window_ms: 4, presets: [], hotkeys: {} }; }
+  renderHotkeyHint();
+}
+function renderAppSettings() {
+  const a = S.app;
+  document.querySelectorAll('input[name="pedal_method"]').forEach(r => { r.checked = r.value === a.pedal_method; });
+  $("#shiftGap").value = a.shift_gap_ms; $("#shiftGapVal").textContent = a.shift_gap_ms ? `${a.shift_gap_ms} ms` : "None";
+  $("#chordWin").value = a.chord_window_ms; $("#chordWinVal").textContent = `${a.chord_window_ms} ms`;
+  $("#shiftGap").style.setProperty("--fill", `${a.shift_gap_ms / 60 * 100}%`);
+  $("#chordWin").style.setProperty("--fill", `${a.chord_window_ms / 40 * 100}%`);
+  $("#keyHold").value = a.key_hold_ms; $("#keyHoldVal").textContent = `${a.key_hold_ms} ms`;
+  $("#keyHold").style.setProperty("--fill", `${(a.key_hold_ms - 10) / 110 * 100}%`);
+  const custom = !!a.layout || !!S.layoutEditing;
+  document.querySelectorAll('input[name="layout_mode"]').forEach(r => { r.checked = r.value === (custom ? "custom" : "standard"); });
+  $("#layoutCustom").hidden = !custom;
+  if (!$("#layoutText").matches(":focus")) $("#layoutText").value = a.layout || S.standardLayout || "";
+  if (!$("#layoutLowest").matches(":focus")) $("#layoutLowest").value = a.layout_lowest || 36;
+  $("#autoSetup").checked = a.auto_setup !== false;
+  const adv = [];
+  if (a.shift_gap_ms) adv.push("Black keys");
+  if (a.chord_window_ms !== 4) adv.push("Chord tightness");
+  if (a.key_hold_ms !== 20) adv.push("Key hold time");
+  if (a.layout) adv.push("Key layout");
+  $("#advTag").hidden = !adv.length; $("#advTag").textContent = `${adv.length} changed`; $("#advTag").title = `Changed: ${adv.join(", ")}`;
+  $("#hotkeyRows").innerHTML = Object.entries(HOTKEY_LABELS).map(([action, label]) =>
+    `<div class="hotkey-row"><span>${label}</span><button class="keycap" data-action="${action}">${keyName((a.hotkeys || {})[action])}</button></div>`).join("");
+  if (S.simulated) $("#hotkeyIntro").textContent = "Hotkeys work on Windows. They're off in this test mode.";
+}
+let listening = null;
+$("#hotkeyRows").addEventListener("click", e => {
+  const b = e.target.closest(".keycap"); if (!b) return;
+  document.querySelectorAll(".keycap.listening").forEach(x => { x.classList.remove("listening"); x.textContent = keyName(S.app.hotkeys[x.dataset.action]); });
+  listening = b; b.classList.add("listening"); b.textContent = "Press a key…";
+});
+const KEY_FROM_EVENT = { Home: "HOME", End: "END", Insert: "INSERT", Delete: "DELETE", PageUp: "PAGEUP", PageDown: "PAGEDOWN", Pause: "PAUSE", ScrollLock: "SCROLLLOCK" };
+setDlg.addEventListener("keydown", e => {
+  if (!listening) return;
+  e.preventDefault(); e.stopPropagation();
+  const b = listening; listening = null; b.classList.remove("listening");
+  if (e.key === "Escape") { b.textContent = keyName(S.app.hotkeys[b.dataset.action]); return; }
+  let name = /^F([1-9]|1[0-2])$/.test(e.key) ? e.key : KEY_FROM_EVENT[e.key];
+  if (e.key === "Backspace") name = "";
+  if (name === undefined) { b.textContent = keyName(S.app.hotkeys[b.dataset.action]); toast("Use F1 to F12, Home, End, Insert, Delete, Page Up, Page Down or Pause.", true); return; }
+  const keys = Object.assign({}, S.app.hotkeys);
+  for (const k of Object.keys(keys)) if (name && keys[k] === name) keys[k] = "";   // a key does one thing
+  keys[b.dataset.action] = name;
+  S.app.hotkeys = keys; renderAppSettings(); renderHotkeyHint(); saveApp({ hotkeys: keys });
+}, true);
+let appPatch = {};
+function saveApp(patch) { Object.assign(appPatch, patch); sendApp(); }
+const sendApp = debounce(async () => {
+  const patch = appPatch; appPatch = {};
+  try {
+    S.app = (await api("POST", "/api/app-settings", patch)).player;
+    $("#settingsSaved").textContent = "Saved.";
+    const k = stageKey();
+    if (k) { const d = await api("GET", `/api/song?key=${encodeURIComponent(k)}`); if (stageKey() === k) { S.song.report = d.report; renderReport(); } }
+  } catch (e) { toast(e.message, true); }
+}, 250);
+$("#settingsBtn").addEventListener("click", async () => {
+  await loadAppSettings(); renderAppSettings(); $("#settingsSaved").textContent = ""; $("#resetConfirm").hidden = true;
+  setDlg.showModal(); loadShortcuts();
+});
+$("#settingsClose").addEventListener("click", () => setDlg.close());
+document.querySelectorAll('input[name="pedal_method"]').forEach(r => r.addEventListener("change", () => { S.app.pedal_method = r.value; saveApp({ pedal_method: r.value }); }));
+$("#shiftGap").addEventListener("input", e => { S.app.shift_gap_ms = +e.target.value; renderAppSettings(); saveApp({ shift_gap_ms: +e.target.value }); });
+$("#keyHold").addEventListener("input", e => { S.app.key_hold_ms = +e.target.value; renderAppSettings(); saveApp({ key_hold_ms: +e.target.value }); });
+document.querySelectorAll('input[name="layout_mode"]').forEach(r => r.addEventListener("change", async () => {
+  if (r.value === "standard") {
+    S.layoutEditing = false;
+    try { S.app = (await api("POST", "/api/app-settings", { layout: "" })).player; $("#layoutMsg").textContent = ""; } catch (e) { toast(e.message, true); }
+  } else S.layoutEditing = true;
+  renderAppSettings(); refreshSong();
+}));
+$("#layoutSave").addEventListener("click", async () => {
+  const layout = $("#layoutText").value.replace(/\s+/g, ""), lowest = +$("#layoutLowest").value;
+  try {
+    S.app = (await api("POST", "/api/app-settings", { layout, layout_lowest: lowest })).player;
+    $("#layoutMsg").style.color = ""; $("#layoutMsg").textContent = S.app.layout ? `Using your ${layout.length}-key layout.` : "That's the standard layout.";
+    renderAppSettings(); refreshSong();
+  } catch (e) { $("#layoutMsg").style.color = "var(--rose)"; $("#layoutMsg").textContent = e.message; }
+});
+async function refreshSong() {
+  const key = stageKey(); if (!key) return;
+  try {
+    const d = await api("GET", `/api/song?key=${encodeURIComponent(key)}`);
+    if (S.selected !== key) return;
+    if (songReady() && (d.rev || 0) < (S.song.rev || 0)) {     // newer settings arrived meanwhile: keep those
+      d.settings = S.song.settings; d.rev = S.song.rev; d.report = S.song.report;
+    }
+    S.song = d; Object.assign(S.song.settings, unsaved(key)); renderStage();
+  } catch (e) { /* ignore */ }
+}
+$("#autoSetup").addEventListener("change", e => { S.app.auto_setup = e.target.checked; saveApp({ auto_setup: e.target.checked }); });
+$("#chordWin").addEventListener("input", e => { S.app.chord_window_ms = +e.target.value; renderAppSettings(); saveApp({ chord_window_ms: +e.target.value }); });
+
+
+
+// ---------- "?" hints ----------
+const HINTS = {
+  speed: "How fast the song plays. 1× is the original speed.",
+  playlike: "How human it sounds. Perfect is exact; Pro, Casual and Beginner add timing feel and a few mistakes.",
+  pedal: "The sustain pedal lets notes ring on. From the song uses the file's own pedal; Auto adds one for you.",
+  loop: "Repeat the whole song, or just a part between A and B.",
+  transpose: "Moves every note up or down. Best fit finds the shift that puts the most notes on the piano.",
+  tracks: "The parts of the song, often the left and right hand. Untick one to leave it out.",
+  feel: "Adds small human timing differences, rolled chords and a tempo that breathes.",
+  mistakes: "Adds slips on purpose, mostly in the fast parts.",
+  takes: "With Feel or Mistakes on, every play is a little different. Lock a take you like to repeat it exactly.",
+  range: "Roblox pianos have 61 keys. Notes beyond them can move an octave, be left out, or use 88-key mode.",
+  maxnotes: "Limits how many keys one chord presses. The melody and bass are always kept.",
+  style: "How long each key is held: as written, short taps, or smooth until the next note.",
+  cleanup: "Removes doubled notes and tiny glitches, which are common in converted songs.",
+};
+function hint(id) { return `<button type="button" class="hint" data-tip="${esc(HINTS[id])}" aria-label="${esc(HINTS[id])}">?</button>`; }
+const tip = document.createElement("div");
+tip.className = "tip"; tip.setAttribute("role", "tooltip"); tip.hidden = true; document.body.appendChild(tip);
+function showTip(el) {
+  tip.textContent = el.dataset.tip; tip.hidden = false;
+  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = Math.min(window.innerWidth - w - 12, Math.max(12, r.left + r.width / 2 - 24));
+  let y = r.bottom + 8;
+  if (y + h > window.innerHeight - 8) y = r.top - h - 8;
+  tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+}
+function hideTip() { tip.hidden = true; }
+document.addEventListener("mouseover", e => { const h = e.target.closest(".hint"); if (h) showTip(h); });
+document.addEventListener("mouseout", e => { if (e.target.closest(".hint")) hideTip(); });
+document.addEventListener("focusin", e => { const h = e.target.closest(".hint"); if (h) showTip(h); else hideTip(); });
+document.addEventListener("focusout", e => { if (e.target.closest(".hint")) hideTip(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !tip.hidden) hideTip(); });
+document.addEventListener("click", e => { const h = e.target.closest(".hint"); if (h) { e.preventDefault(); showTip(h); } });
+window.addEventListener("scroll", hideTip, true);
+
+// ---------- Best for this song ----------
+async function bestForSong() {
+  if (S.loading) await S.loading;
+  const key = stageKey(); if (!key) return;
+  try {
+    await saveSettingsNow();
+    const d = await api("POST", "/api/song/best", { key });
+    if (stageKey() !== key) return;
+    applyServerSettings(key, d.settings, d.rev, d.report);
+    showBestPanel("Set up for this song", d.changes, d.previous, d.playable !== false);
+  } catch (e) { toast(e.message, true); }
+}
+const BEST_KEYS = ["tracks", "transpose", "range_mode", "pedal_mode", "max_notes", "cleanup", "note_style"];
+function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function showBestPanel(title, changes, previous, playable = true) {
+  const p = $("#bestPanel"); if (!p) return;
+  const before = {}, after = {};
+  for (const k of BEST_KEYS) if (previous && k in previous && !same(previous[k], S.song.settings[k])) { before[k] = previous[k]; after[k] = S.song.settings[k]; }
+  S.bestUndo = changes.length && Object.keys(before).length ? { before, after } : null;
+  p.innerHTML = `<div class="best-top"><strong>${esc(title)}</strong>
+      ${S.bestUndo ? `<button class="link-btn" id="bestUndo">Undo</button>` : ""}
+      <button class="link-btn" id="bestHide" aria-label="Hide this">✕</button></div>
+    ${changes.length ? `<ul class="best-list">${changes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>`
+      : !playable ? `<p class="best-none">This song only has drums (or no notes at all), so there's nothing for the piano to play.</p>`
+      : `<p class="best-none">This song was already set up well, so nothing needed changing. Speed and Play like are yours to choose.</p>`}`;
+  p.hidden = false;
+}
+
+// ---------- remembered window state ----------
+async function loadUi() {
+  try { S.ui = Object.assign({ more_open: false, welcomed: false }, await api("GET", "/api/ui")); }
+  catch (e) { S.ui = { more_open: false, welcomed: true }; }
+}
+
+// ---------- shortcuts and starting over ----------
+function renderShortcuts(d) {
+  const both = d.desktop && d.start_menu;
+  $("#shortcutText").textContent = both
+    ? "PianoPilot is on your desktop and in the Start menu. To pin it to the taskbar, right-click it in the Start menu and choose Pin to taskbar. If you move the PianoPilot folder, add the shortcuts again."
+    : "Add PianoPilot to your desktop and Start menu, so you can open it like any other app.";
+  $("#shortcutAdd").textContent = both ? "Add them again" : "Add to desktop and Start menu";
+  $("#shortcutRemove").hidden = !(d.desktop || d.start_menu);
+}
+async function loadShortcuts() {
+  try { renderShortcuts(await api("GET", "/api/shortcuts")); } catch (e) { /* leave the default text */ }
+}
+async function changeShortcuts(action) {
+  const btn = action === "add" ? $("#shortcutAdd") : $("#shortcutRemove");
+  btn.disabled = true;
+  try { const d = await api("POST", "/api/shortcuts", { action }); renderShortcuts(d); toast(d.message); }
+  catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; }
+}
+$("#shortcutAdd").addEventListener("click", () => changeShortcuts("add"));
+$("#shortcutRemove").addEventListener("click", () => changeShortcuts("remove"));
+
+const RESET_TEXT = {
+  app: "Reset these settings? The pedal, black keys, chord tightness, key hold time, key layout and hotkeys go back to how they started. Your saved Play like mixes stay.",
+  songs: "Reset every song's settings? Speed, transpose, tracks, loop, Play like, pedal and the rest go back to normal for all of your songs.",
+};
+let resetWhat = null;
+document.querySelectorAll("[data-reset]").forEach(b => b.addEventListener("click", () => {
+  resetWhat = b.dataset.reset; $("#resetText").textContent = RESET_TEXT[resetWhat];
+  $("#resetConfirm").hidden = false; $("#resetNo").focus();
+}));
+$("#resetNo").addEventListener("click", () => { $("#resetConfirm").hidden = true; resetWhat = null; });
+$("#resetYes").addEventListener("click", async () => {
+  if (!resetWhat) return;
+  try { const d = await api("POST", "/api/reset", { what: resetWhat }); toast(d.message); $("#settingsSaved").textContent = ""; }
+  catch (e) { toast(e.message, true); }
+  $("#resetConfirm").hidden = true; resetWhat = null;
+});
+async function afterReset() {
+  S.layoutEditing = false;
+  await loadAppSettings();
+  if (setDlg.open) renderAppSettings();
+  refreshSong();
+}
+
+// ---------- help ----------
+const helpDlg = $("#helpDlg");
+async function openHelp() {
+  if (helpDlg.open) return;
+  const h = (S.app && S.app.hotkeys) || {};
+  $("#helpKeys").innerHTML = Object.entries(HOTKEY_LABELS).map(([action, label]) =>
+    `<kbd class="${h[action] ? "" : "off"}">${esc(keyName(h[action]))}</kbd><span>${label}</span>`).join("");
+  helpDlg.showModal();
+  $(".help-body").scrollTop = 0;      // only works once the dialog is showing
+  $("#helpClose").focus();
+  try {
+    const a = await api("GET", "/api/about");
+    const rows = [["Version", a.version], ["Python", a.python], ["Folder", a.app_folder]];
+    if (a.simulated) rows.push(["Mode", "Test mode: no keys are sent"]);
+    $("#aboutGrid").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+    $("#openLog").disabled = !a.has_log;
+  } catch (e) { $("#aboutGrid").innerHTML = ""; }
+}
+$("#helpBtn").addEventListener("click", openHelp);
+$("#helpClose").addEventListener("click", () => helpDlg.close());
+$("#stage").addEventListener("click", e => { if (e.target.closest("[data-open-help]")) openHelp(); });
+$("#openLog").addEventListener("click", async () => {
+  try { const d = await api("POST", "/api/open-log"); if (S.simulated) toast(`Log: ${d.path}`); } catch (e) { toast(e.message, true); }
+});
+$("#helpSongs").addEventListener("click", async () => {
+  try { const d = await api("POST", "/api/open-folder"); if (S.simulated) toast(`Songs folder: ${d.path}`); } catch (e) { toast(e.message, true); }
+});
+
+
+// ---------- first-time welcome ----------
+const welcomeDlg = $("#welcomeDlg");
+function showWelcome() { welcomeDlg.showModal(); $("#welcomeDone").focus(); }
+function openWelcome() { if (!welcomeDlg.open && !document.querySelector("dialog[open]")) showWelcome(); }
+welcomeDlg.addEventListener("close", () => {
+  if (!S.ui.welcomed) { S.ui.welcomed = true; api("POST", "/api/ui", { welcomed: true }).catch(() => {}); }
+});
+$("#welcomeDone").addEventListener("click", () => welcomeDlg.close());
+$("#welcomeCal").addEventListener("click", () => { welcomeDlg.close(); openCalibration(); });
+$("#welcomeAdd").addEventListener("click", () => { welcomeDlg.close(); openAdd(); });
+$("#helpWelcome").addEventListener("click", () => { helpDlg.close(); showWelcome(); });
+
+// ---------- deleting a song ----------
+const delDlg = $("#delDlg");
+let delKey = null;
+function askDelete(key) {
+  const entry = S.songs.find(s => s.key === key); if (!entry) return;
+  delKey = key;
+  const where = S.isWindows === false ? "the data/Deleted songs folder" : "the Recycle Bin";
+  const playing = ACTIVE.has(S.status.state) && S.status.key === key ? " It's playing right now, so it stops first." : "";
+  $("#delText").textContent = `“${entry.title}” goes to ${where}, so you can still get it back from there. Its settings in PianoPilot are removed.${playing}`;
+  delDlg.showModal(); $("#delNo").focus();
+}
+$("#delNo").addEventListener("click", () => delDlg.close());
+$("#delYes").addEventListener("click", async () => {
+  const key = delKey; delDlg.close();
+  if (!key) return;
+  try { await saveSettingsNow(); const d = await api("POST", "/api/song/delete", { key }); toast(d.message); }   // a change on its way is saved first, so nothing lands after the delete
+  catch (e) { toast(e.message, true); }
+});
+
+// ---------- keyboard ----------
+window.addEventListener("keydown", e => {
+  if (e.code === "Space" && e.repeat && !e.target.closest("input, textarea, [contenteditable]")) { e.preventDefault(); return; }   // held down: once is enough
+  if (e.code === "Space" && e.target.closest(".song") && S.song && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault(); onPlayButton(); return;            // just clicked a song: Space plays it
+  }
+  if (e.target.closest("input, textarea, button, select, summary, a, dialog, [contenteditable]") || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === "Space" && S.song) { e.preventDefault(); onPlayButton(); }
+  if (e.key === "/") { e.preventDefault(); $("#search").focus(); }
+  if (e.key === "?") { e.preventDefault(); openHelp(); }
+});
+
+// Hotkeys while this window is in front. (The global ones only listen while Roblox is in front.)
+// Home, End, Page Up/Down and Delete keep their usual job here: moving around and scrolling.
+const PAGE_KEYS = new Set(["HOME", "END", "PAGEUP", "PAGEDOWN", "DELETE"]);
+window.addEventListener("keydown", e => {
+  if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+  if (document.querySelector("dialog[open]") || e.target.closest("input, textarea, select")) return;
+  const name = /^F([1-9]|1[0-2])$/.test(e.key) ? e.key : KEY_FROM_EVENT[e.key];
+  if (!name || PAGE_KEYS.has(name)) return;
+  const keys = (S.app && S.app.hotkeys) || {};
+  const action = Object.keys(keys).find(a => keys[a] === name);
+  if (!action) return;
+  e.preventDefault();
+  api("POST", "/api/hotkey", { action, key: S.selected }).catch(err => toast(err.message, true));   // the song picked here
+});
+
+renderStage();
+Promise.all([loadAppSettings(), loadUi()]).then(() => {
+  connect();
+  if (!S.ui.welcomed) setTimeout(openWelcome, 400);
+});
+</script>
+</body>
+</html>

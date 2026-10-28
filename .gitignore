@@ -1,0 +1,10 @@
+# Made by PianoPilot while it runs: your settings, log and downloaded model
+data/
+__pycache__/
+*.pyc
+# Your own songs (the two example songs are kept)
+Songs/*
+!Songs/Beethoven - Fur Elise (opening).mid
+!Songs/Bach - Prelude in C (opening).mid
+# Built from launcher/ (it's in the download on the Releases page)
+PianoPilot.exe

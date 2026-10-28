@@ -1,0 +1,32 @@
+// PianoPilot.exe resources: icon, manifest, version info
+1 ICON "../ui/pianopilot.ico"
+1 24 "app.manifest"
+
+1 VERSIONINFO
+FILEVERSION 0,8,0,0
+PRODUCTVERSION 0,8,0,0
+FILEFLAGSMASK 0x3F
+FILEFLAGS 0x0
+FILEOS 0x40004
+FILETYPE 0x1
+FILESUBTYPE 0x0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Waaa"
+      VALUE "FileDescription", "PianoPilot"
+      VALUE "FileVersion", "0.8.0"
+      VALUE "InternalName", "PianoPilot"
+      VALUE "LegalCopyright", "Free and open source (GPL-3.0)"
+      VALUE "OriginalFilename", "PianoPilot.exe"
+      VALUE "ProductName", "PianoPilot"
+      VALUE "ProductVersion", "0.8.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

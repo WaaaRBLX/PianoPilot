@@ -1,0 +1,6 @@
+# Windows batch files need Windows line endings
+*.bat text eol=crlf
+*.mid binary
+*.ico binary
+*.ttf binary
+*.png binary
