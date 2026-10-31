@@ -32,7 +32,7 @@ PianoPilot plays songs on Roblox pianos for you. Add an MP3 or a MIDI file, pres
 The first time you add an MP3, PianoPilot sets this up with one click:
 
 - It needs the piano model file, [`PianoModel.pianoscribe`](https://downloads.justagwas.com/pianoscribe/PianoModel.pianoscribe), in your Downloads folder.
-- It downloads about 150 MB of libraries (NumPy, SciPy, ONNX Runtime). It uses your graphics card when it can.
+- It downloads about 150 MB of libraries (NumPy, SciPy, ONNX Runtime) into PianoPilot's own Python, so keep the PianoPilot folder somewhere that's yours, like Downloads or Documents (not Program Files). It uses your graphics card when it can.
 
 ### What you need
 
@@ -46,7 +46,7 @@ The first time you add an MP3, PianoPilot sets this up with one click:
 
 ### Updates
 
-Once a day, PianoPilot asks GitHub whether a newer version is out and shows a small note at the top of the song list if there is. Nothing about you or your songs is sent, and you can turn it off in Settings. To update, unzip the new download over your PianoPilot folder: your songs and settings stay.
+Once a day, PianoPilot asks GitHub whether a newer version is out and shows a small note at the top of the song list if there is. Nothing about you or your songs is sent, and you can turn it off in Settings. To update, unzip the new download over your PianoPilot folder: your songs and settings stay. Coming from 0.8: if you used MP3 import there, PianoPilot may ask you to click **Set up** once more, and downloads the libraries again into its own Python.
 
 ### Hotkeys
 

@@ -3,7 +3,8 @@
  *
  * All it does: find Python, then run  pythonw.exe "<this folder>\pianopilot.py".
  * Where it looks, in order:
- *   1. runtime\pythonw.exe (the Python that comes with PianoPilot's download)
+ *   1. runtime\pythonw.exe (the Python that comes with PianoPilot's download; run with -E -s, and
+ *      skipped if its files look incomplete)
  *   2. data\python.txt   (PianoPilot writes the Python it last ran with here)
  *   3. pythonw.exe on the PATH
  *   4. %LOCALAPPDATA%\Python\bin\pythonw.exe          (Python install manager)
@@ -87,6 +88,7 @@ static WCHAR env[CAP];
 static WCHAR cmd[CAP * 2 + 16];
 static WCHAR message[CAP * 2];
 static WCHAR number[16];
+static const WCHAR *flags = L"";       /* extra Python options for the next launch() */
 static char raw[CAP * 3];
 static STARTUPINFOW si;
 static PROCESS_INFORMATION pi;
@@ -158,9 +160,17 @@ static int read_saved_python(void) {
     return n > 0;
 }
 
-/* The Python that comes with the download, in the runtime folder next to this exe. */
+/* The Python that comes with the download, in the runtime folder next to this exe. A few of its files are
+   checked first, so a half-unzipped copy falls through to an installed Python instead of failing to start.
+   (python313.dll: update this name when the bundled Python changes version.) */
 static int bundled(void) {
-    return put(candidate, CAP, dir, 1) && put(candidate, CAP, L"\\runtime\\pythonw.exe", 0);
+    static const WCHAR *const parts[] = { L"\\runtime\\python313.dll", L"\\runtime\\Lib\\os.py",
+                                          L"\\runtime\\Lib\\encodings\\__init__.py", L"\\runtime\\pythonw.exe" };
+    int k;
+    for (k = 0; k < 4; k++)
+        if (!put(candidate, CAP, dir, 1) || !put(candidate, CAP, parts[k], 0) || !is_file(candidate)) return 0;
+    flags = L" -E -s";      /* its own Python ignores PYTHONPATH/PYTHONHOME and the user's own packages */
+    return 1;
 }
 
 static int on_path(const WCHAR *name) {
@@ -177,9 +187,12 @@ static int under_local_appdata(const WCHAR *rest) {
 /* Start PianoPilot with the Python in `candidate`. 1 = started (even if it then failed), 0 = couldn't start. */
 static int launch(void) {
     DWORD code = 0;
+    const WCHAR *extra = flags;
+    flags = L"";
     if (!is_file(candidate)) return 0;
     if (!put(cmd, CAP * 2 + 16, L"\"", 1) || !put(cmd, CAP * 2 + 16, candidate, 0) ||
-        !put(cmd, CAP * 2 + 16, L"\" \"", 0) || !put(cmd, CAP * 2 + 16, script, 0) ||
+        !put(cmd, CAP * 2 + 16, L"\"", 0) || !put(cmd, CAP * 2 + 16, extra, 0) ||
+        !put(cmd, CAP * 2 + 16, L" \"", 0) || !put(cmd, CAP * 2 + 16, script, 0) ||
         !put(cmd, CAP * 2 + 16, L"\"", 0))
         return 0;
     si.cb = sizeof(si);
@@ -236,7 +249,7 @@ void start(void) {
         (under_local_appdata(L"\\Microsoft\\WindowsApps\\pythonw.exe") && launch()))
         ExitProcess(0);
 
-    if (MessageBoxW(0, L"PianoPilot needs Python. Its own copy (the runtime folder) is missing, and Python "
+    if (MessageBoxW(0, L"PianoPilot needs Python. Its own copy (the runtime folder) is missing or damaged, and Python "
                        L"isn't installed on this PC either.\n\n"
                        L"Download PianoPilot again (the download includes Python), or install Python from "
                        L"python.org and open PianoPilot again.\n\n"

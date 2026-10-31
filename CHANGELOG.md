@@ -2,11 +2,12 @@
 
 ## 1.0.0 (in testing)
 
-- **No Python install needed.** The download now includes its own Python (the `runtime` folder), so you unzip and double-click. MP3 import installs its libraries into that same copy, so there's no more "Use Python 3.13" step.
+- **No Python install needed.** The download now includes its own Python (the `runtime` folder), so you unzip and double-click. MP3 import installs its libraries into that same copy (it's Python 3.13, which those libraries support), so new users never see the old "Use Python 3.13" step. If you set up MP3 import in 0.8, you may need to click Set up once more.
 - **Update check.** Once a day PianoPilot asks GitHub whether a newer version is out and shows a small note at the top of the song list. Nothing about you or your songs is sent; turn it off in Settings.
 - **System requirements** are in the README and in the app's README.txt.
 - **Any keyboard layout works.** Roblox reads keys by position, and PianoPilot presses them by position, so AZERTY, QWERTZ and other layouts play the same notes as QWERTY.
 - A new tip in Help for fast songs that drop notes (keep Roblox at a steady 60 fps).
+- MP3 setup gives clearer messages when a download fails (offline, antivirus, or a folder PianoPilot can't write to).
 
 ## 0.8.0 (beta)
 

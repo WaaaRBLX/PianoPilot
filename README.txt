@@ -7,7 +7,8 @@ START
 
   The first time, Windows may say "Windows protected your PC". Click More info, then Run anyway.
   Windows shows this for apps that aren't digitally signed by a known publisher. PianoPilot.exe is a tiny starter:
-  it only runs pianopilot.py with the Python in the runtime folder. Its source code is in the launcher folder.
+  it runs pianopilot.py with the Python in the runtime folder (or, if that's missing, a Python installed on
+  your PC). Its source code is in the launcher folder.
   Nothing needs installing: PianoPilot brings its own Python (the runtime folder). Keep that folder next to
   PianoPilot.exe.
 
@@ -52,7 +53,8 @@ ADD SONGS
   Put in any of these and PianoPilot works out the rest:
   - MP3s and videos of piano music: turned into songs. Piano-only recordings come out best.
     The first time, PianoPilot sets this up (one click). It needs PianoModel.pianoscribe in your
-    Downloads folder and downloads about 150 MB of libraries into its own Python (the runtime folder).
+    Downloads folder and downloads about 150 MB of libraries into its own Python (the runtime folder), so
+    keep PianoPilot in a folder that's yours, like Downloads or Documents (not Program Files).
   - MIDI files: added as they are.
   - Text piano sheets (like "[tu] y o | p") as .txt files: opens the sheet window to check the tempo.
   You can also drop files (or a whole folder) anywhere on the window, or put MIDI files in the Songs folder.
@@ -102,6 +104,8 @@ IF SOMETHING GOES WRONG
 UPDATING TO A NEW VERSION
   Download the new zip and unzip it over your PianoPilot folder (say yes to replacing files). Your songs
   (Songs folder) and settings (data folder) stay as they are.
+  Coming from 0.8: if you used MP3 import there, PianoPilot may ask you to click Set up once more. It then
+  downloads the libraries again (about 150 MB) into its own Python.
 
 A NOTE FROM WAAA
   PianoPilot started as a random idea and turned into a passion project. The goal was to test what AI

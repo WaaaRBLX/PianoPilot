@@ -1998,29 +1998,35 @@ async function refreshSong() {
 $("#autoSetup").addEventListener("change", e => { S.app.auto_setup = e.target.checked; saveApp({ auto_setup: e.target.checked }); });
 $("#updateCheck").addEventListener("change", e => {
   S.app.update_check = e.target.checked; saveApp({ update_check: e.target.checked });
-  if (S.update) { S.update.enabled = e.target.checked; renderUpdate(); }
+  if (S.update && !S.update.test_mode) { S.update.enabled = e.target.checked; renderUpdate(); }
 });
 $("#updateNow").addEventListener("click", async () => {
   const b = $("#updateNow"); b.disabled = true; $("#updateStatus").textContent = "Checking…";
   try { renderUpdate(await api("POST", "/api/update")); }
   catch (e) { $("#updateStatus").textContent = e.message; }
-  finally { b.disabled = false; }
+  finally { b.disabled = !!(S.update && S.update.test_mode); }
 });
 
 // ---------- updates ----------
 function renderUpdate(u) {
   if (u) S.update = u;
   const x = S.update; if (!x) return;
-  const show = x.enabled && x.available && recall("skipUpdate", "") !== x.latest;
+  const show = x.enabled && x.available && x.skipped !== x.latest;
   $("#updateNote").hidden = !show;
   if (show) { $("#updateText").textContent = `PianoPilot ${x.latest} is out.`; $("#updateGet").href = x.url; }
+  $("#updateNow").disabled = !!x.test_mode;
   const when = x.checked_at ? new Date(x.checked_at * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
-  $("#updateStatus").textContent = !x.checked_at ? `You have version ${x.current}. Not checked yet.`
-    : x.failed ? `You have version ${x.current}. Couldn't reach GitHub last time (${when}); it tries again in a few hours.`
+  $("#updateStatus").textContent = x.test_mode ? `You have version ${x.current}. Test mode doesn't check for updates.`
+    : !x.checked_at ? `You have version ${x.current}. Not checked yet.`
     : x.available ? `Version ${x.latest} is out. You have ${x.current}.`
+    : x.failed ? `You have version ${x.current}. Couldn't reach GitHub last time (${when})` + (x.enabled ? "; it tries again in a few hours." : ".")
     : `You have the newest version (${x.current}). Checked ${when}.`;
 }
-$("#updateHide").addEventListener("click", () => { if (S.update && S.update.latest) store("skipUpdate", S.update.latest); renderUpdate(); });
+$("#updateHide").addEventListener("click", async () => {
+  if (!S.update || !S.update.latest) return;
+  S.update.skipped = S.update.latest; renderUpdate();         // hide it now; the app remembers it for this version
+  try { renderUpdate(await api("POST", "/api/update", { skip: S.update.latest })); } catch (e) { /* stays hidden this time */ }
+});
 $("#chordWin").addEventListener("input", e => { S.app.chord_window_ms = +e.target.value; renderAppSettings(); saveApp({ chord_window_ms: +e.target.value }); });
 
 

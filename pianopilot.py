@@ -13,6 +13,7 @@ import json
 import os
 import queue
 import random
+import re
 import secrets
 import shutil
 import subprocess
@@ -1250,20 +1251,39 @@ class HotkeyWatcher:
 
 # ========================== AUDIO IMPORT ============================
 
-def python_command(settings):
+RUNTIME_DIR = APP_DIR / "runtime"       # the Python that comes with PianoPilot (in the release download)
+
+
+def running_bundled():
+    """True when PianoPilot runs on its own Python from the runtime folder."""
+    try:
+        return Path(sys.executable).resolve().parent == RUNTIME_DIR.resolve()
+    except OSError:
+        return False
+
+
+def custom_python(settings):
     custom = settings.app("converter_python")
-    if isinstance(custom, list) and custom:
-        return [str(x) for x in custom]
+    return [str(x) for x in custom] if isinstance(custom, list) and custom else None
+
+
+def python_command(settings):
+    custom = custom_python(settings)
+    if custom:
+        return custom
     exe = Path(sys.executable)
     console = exe.with_name("python.exe")
-    if exe.name.lower() == "pythonw.exe" and console.is_file():
-        return [str(console)]       # helpers print progress, so give them the console Python (still hidden)
-    return [str(exe)]
+    cmd = [str(console)] if exe.name.lower() == "pythonw.exe" and console.is_file() else [str(exe)]
+    if running_bundled():
+        # Keep PianoPilot's own Python to itself: no PYTHONPATH/PYTHONHOME from the PC, no packages from a
+        # Python installed separately for this user (%APPDATA%\Python).
+        cmd += ["-E", "-s"]
+    return cmd                          # helpers print progress, so they get the console Python (still hidden)
 
 
 def remember_python():
     """Save which Python runs PianoPilot, so PianoPilot.exe finds it next time (data/python.txt)."""
-    if not IS_WINDOWS:
+    if not IS_WINDOWS or running_bundled():     # PianoPilot.exe finds its own Python without help
         return
     windowed = Path(sys.executable).with_name("pythonw.exe")
     if not windowed.is_file():
@@ -1387,8 +1407,18 @@ class AudioImport:
             out = subprocess.run(cmd, capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW)
             line = [ln for ln in out.stdout.splitlines() if ln.startswith("{")][-1]
             result = json.loads(line)
+        except subprocess.TimeoutExpired as exc:
+            result = {"ok": False, "missing": ["python"], "error": str(exc), "slow": True}
         except Exception as exc:
             result = {"ok": False, "missing": ["python"], "error": str(exc)}
+        if ("python" in result.get("missing", []) and not result.get("slow")
+                and custom_python(self.settings) and running_bundled()):
+            # A second Python saved by an older version (the old "Use Python 3.13" button) can't run any more,
+            # say it was uninstalled. PianoPilot's own Python is 3.13 too, so go back to it.
+            log(f"Audio import: the saved Python ({' '.join(custom_python(self.settings))}) didn't work; "
+                "using PianoPilot's own Python.")
+            self.settings.set_app("converter_python", None)
+            return self.check_deps(refresh=True)
         self.check_cache = result
         return result
 
@@ -1421,8 +1451,12 @@ class AudioImport:
 
     def _run(self, cmd, step):
         self._setup_log("> " + " ".join(cmd), step)
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                    text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+        except OSError as exc:
+            self._setup_log(f"Couldn't start {cmd[0]}: {exc.strerror or exc}")
+            return 127
         for line in proc.stdout:
             line = line.rstrip()
             if line:
@@ -1431,7 +1465,7 @@ class AudioImport:
 
     def _run_setup(self, use_python):
         try:
-            if use_python:
+            if use_python and not running_bundled():
                 # Second Python just for audio import (when the main one is too new for the AI library).
                 if self._run(["py", "install", "--yes", use_python], f"Installing Python {use_python}") != 0:
                     raise RuntimeError(f"Couldn't install Python {use_python}. Open a command window and run: "
@@ -1471,11 +1505,7 @@ class AudioImport:
                     code = self._run(base + common + ["onnxruntime"], "Downloading the AI libraries (CPU version)")
                 deps = self.check_deps(refresh=True)
                 if code != 0 or not deps.get("ok"):
-                    version = deps.get("python") or sys.version.split()[0]
-                    raise RuntimeError(
-                        f"The AI libraries wouldn't install for Python {version}. This usually means that "
-                        "Python version is too new for them. Click \"Use Python 3.13\" to install a second, "
-                        "older Python just for audio import.")
+                    raise RuntimeError(self._install_problem(deps))
             with self.lock:
                 self.setup.update(running=False, done=True, step="Ready", error=None)
             self._setup_log("Audio import is ready.")
@@ -1484,6 +1514,21 @@ class AudioImport:
                 self.setup.update(running=False, done=False, error=str(exc))
             self._setup_log(f"Setup stopped: {exc}")
         EVENTS.send("setup", self.setup_view())
+
+    def _install_problem(self, deps):
+        """What to tell the user when the libraries wouldn't install."""
+        version = deps.get("python") or sys.version.split()[0]
+        own = running_bundled() and not custom_python(self.settings)
+        site = RUNTIME_DIR / "Lib" / "site-packages"
+        if own and site.is_dir() and not os.access(site, os.W_OK):
+            return (f"PianoPilot can't write to its own folder ({APP_DIR}). Move the PianoPilot folder somewhere "
+                    "that's yours, like Downloads or Documents, then click Set up again.")
+        if not own and IS_WINDOWS and version_tuple(version) >= (3, 14):
+            return (f"The AI libraries wouldn't install for Python {version}. This usually means that "
+                    "Python version is too new for them. Click \"Use Python 3.13\" to install a second, "
+                    "older Python just for audio import.")
+        return ("The AI libraries didn't download. Check that you're online and that antivirus or a firewall "
+                "isn't blocking Python, then click Set up again. The lines above say what went wrong.")
 
     # ---- jobs ----
     def jobs_view(self):
@@ -1635,18 +1680,36 @@ UPDATE_EVERY = 24 * 3600            # seconds between checks
 UPDATE_RETRY = 3 * 3600             # after a failed check (offline, say)
 
 
+def parse_version(text):
+    """'v1.2.3' -> ((1, 2, 3), True). The flag is False for a test version such as '1.1.0-beta' or '1.1.0rc1',
+    which never counts as an update. Returns (None, False) for anything that isn't a version."""
+    match = re.fullmatch(r"[vV]?(\d{1,4})(?:\.(\d{1,4}))?(?:\.(\d{1,4}))?(.*)", str(text or "").strip())
+    if not match:
+        return None, False
+    numbers = tuple(int(x) if x else 0 for x in match.groups()[:3])
+    return numbers, match.group(4) == ""
+
+
 def version_tuple(text):
-    """'v1.2.3' or '1.2' -> (1, 2, 3) / (1, 2, 0). Anything after a dash (like -beta) is ignored."""
-    parts = []
-    for piece in str(text or "").strip().lstrip("vV").split("-")[0].split(".")[:3]:
-        digits = "".join(ch for ch in piece if ch.isdigit())
-        parts.append(int(digits) if digits else 0)
-    return tuple(parts + [0] * (3 - len(parts)))
+    """'v1.2.3' or '1.2' -> (1, 2, 3) / (1, 2, 0); (0, 0, 0) if it isn't a version."""
+    return parse_version(text)[0] or (0, 0, 0)
+
+
+def is_update(latest, current=None):
+    """True only when `latest` is a full version newer than `current` (this copy by default)."""
+    numbers, final = parse_version(latest)
+    return bool(numbers) and final and numbers > version_tuple(current or VERSION)
+
+
+def safe_release_url(url):
+    url = str(url or "")
+    return url if url.startswith("https://github.com/WaaaRBLX/PianoPilot/") and len(url) < 300 else RELEASES_PAGE
 
 
 class UpdateCheck:
     """Once a day, asks GitHub for the newest full release (beta releases don't count) and tells the window
-    when it's newer than this copy. Only that one request is made; nothing about you or your songs is sent."""
+    when it's newer than this copy. Only that one request is made; nothing about you or your songs is sent.
+    In test mode (no keys sent) it never asks GitHub."""
 
     def __init__(self, settings):
         self.settings = settings
@@ -1655,19 +1718,29 @@ class UpdateCheck:
         self.state = saved if isinstance(saved, dict) else {}
 
     def enabled(self):
-        return clean_app_settings(self.settings.app("player"))["update_check"]
+        return not SIMULATE and clean_app_settings(self.settings.app("player"))["update_check"]
 
     def info(self):
         with self.lock:
             state = dict(self.state)
         latest = state.get("latest") if isinstance(state.get("latest"), str) else None
-        newer = bool(latest) and version_tuple(latest) > version_tuple(VERSION)
-        url = state.get("url") if isinstance(state.get("url"), str) and state.get("url", "").startswith(
-            "https://github.com/WaaaRBLX/PianoPilot/") else RELEASES_PAGE
-        return {"enabled": self.enabled(), "current": VERSION, "latest": latest, "available": newer,
-                "url": url, "checked_at": state.get("checked_at"), "failed": bool(state.get("failed"))}
+        skipped = self.settings.app("update_skip")
+        checked = state.get("checked_at")
+        return {"enabled": self.enabled(), "test_mode": SIMULATE, "current": VERSION, "latest": latest,
+                "available": is_update(latest), "skipped": skipped if isinstance(skipped, str) else None,
+                "url": safe_release_url(state.get("url")),
+                "checked_at": checked if isinstance(checked, (int, float)) else None,
+                "failed": bool(state.get("failed"))}
+
+    def skip(self, version):
+        self.settings.set_app("update_skip", str(version)[:40] if version else None)
+        info = self.info()
+        EVENTS.send("update", info)
+        return info
 
     def check(self):
+        if SIMULATE:
+            return self.info()
         request = urllib.request.Request(RELEASES_API, headers={
             "User-Agent": f"PianoPilot/{VERSION}", "Accept": "application/vnd.github+json"})
         now = time.time()
@@ -1675,9 +1748,7 @@ class UpdateCheck:
             with urllib.request.urlopen(request, timeout=10) as answer:
                 data = json.loads(answer.read(200_000).decode("utf-8"))
             tag = str(data.get("tag_name") or "").strip()[:40]
-            url = str(data.get("html_url") or "")
-            state = {"checked_at": now, "latest": tag.lstrip("vV") or None,
-                     "url": url if url.startswith("https://github.com/WaaaRBLX/PianoPilot/") else RELEASES_PAGE}
+            state = {"checked_at": now, "latest": tag.lstrip("vV") or None, "url": safe_release_url(data.get("html_url"))}
         except urllib.error.HTTPError as exc:
             if exc.code == 404:                 # no full release published yet
                 state = {"checked_at": now, "latest": None, "url": RELEASES_PAGE}
@@ -1695,14 +1766,21 @@ class UpdateCheck:
         EVENTS.send("update", info)
         return info
 
+    def due(self, now=None):
+        """Whether a check is due; a missing, broken or future time (the clock was wrong once) means yes."""
+        now = time.time() if now is None else now
+        with self.lock:
+            last = self.state.get("checked_at")
+            wait = UPDATE_RETRY if self.state.get("failed") else UPDATE_EVERY
+        if not isinstance(last, (int, float)) or last > now + 60:
+            return True
+        return now - last >= wait
+
     def run(self):
         time.sleep(20)                          # let the app settle first
         while True:
             try:
-                with self.lock:
-                    last = self.state.get("checked_at") or 0
-                    wait = UPDATE_RETRY if self.state.get("failed") else UPDATE_EVERY
-                if self.enabled() and time.time() - float(last) >= wait:
+                if self.enabled() and self.due():
                     self.check()
             except Exception:
                 traceback.print_exc()
@@ -1711,6 +1789,9 @@ class UpdateCheck:
 
 def api_update(h, query):
     if h.command == "POST":
+        body = h._json_body()
+        if "skip" in body:
+            return APP.updates.skip(body.get("skip"))
         return APP.updates.check()
     return APP.updates.info()
 
@@ -2616,6 +2697,7 @@ def api_reset(h, query):
     else:
         raise ApiError(400, "Nothing to reset.")
     EVENTS.send("reset", {"what": what})
+    EVENTS.send("update", APP.updates.info())      # the update switch may have changed back
     return {"message": message}
 
 
