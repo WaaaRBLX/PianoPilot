@@ -6,6 +6,8 @@ PianoPilot plays songs on Roblox pianos for you. Add an MP3 or a MIDI file, pres
 
 **[Download PianoPilot 1.0](https://github.com/WaaaRBLX/PianoPilot/releases/latest)**: unzip it anywhere and double-click `PianoPilot.exe`. Nothing else to install: it brings its own Python.
 
+> **Version 1.0 is being tested in Roblox right now.** Until it's out, the download is the 0.8 beta, which needs [Python](https://www.python.org/downloads/) 3.9 or newer installed (`PianoPilot.exe` offers to open the download page if it's missing). Everything below describes 1.0.
+
 ## What it does
 
 - **Plays any song on a Roblox piano.** It presses the same keys you would, with accurate timing, including black keys, chords and the sustain pedal.
