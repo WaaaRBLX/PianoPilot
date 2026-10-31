@@ -1,13 +1,14 @@
 /*
  * PianoPilot.exe - starts PianoPilot without a command window.
  *
- * All it does: find Python on this PC, then run  pythonw.exe "<this folder>\pianopilot.py".
+ * All it does: find Python, then run  pythonw.exe "<this folder>\pianopilot.py".
  * Where it looks, in order:
- *   1. data\python.txt   (PianoPilot writes the Python it last ran with here)
- *   2. pythonw.exe on the PATH
- *   3. %LOCALAPPDATA%\Python\bin\pythonw.exe          (Python install manager)
- *   4. pyw.exe on the PATH                             (the classic "py" launcher)
- *   5. %LOCALAPPDATA%\Microsoft\WindowsApps\pythonw.exe (Microsoft Store Python)
+ *   1. runtime\pythonw.exe (the Python that comes with PianoPilot's download)
+ *   2. data\python.txt   (PianoPilot writes the Python it last ran with here)
+ *   3. pythonw.exe on the PATH
+ *   4. %LOCALAPPDATA%\Python\bin\pythonw.exe          (Python install manager)
+ *   5. pyw.exe on the PATH                             (the classic "py" launcher)
+ *   6. %LOCALAPPDATA%\Microsoft\WindowsApps\pythonw.exe (Microsoft Store Python)
  * If PianoPilot stops with an error in its first seconds, it says so and offers the log.
  *
  * Built without the C runtime (see build.sh), so it only uses kernel32, user32 and shell32.
@@ -157,6 +158,11 @@ static int read_saved_python(void) {
     return n > 0;
 }
 
+/* The Python that comes with the download, in the runtime folder next to this exe. */
+static int bundled(void) {
+    return put(candidate, CAP, dir, 1) && put(candidate, CAP, L"\\runtime\\pythonw.exe", 0);
+}
+
 static int on_path(const WCHAR *name) {
     DWORD n = SearchPathW(0, name, 0, CAP, candidate, 0);
     return n > 0 && n < CAP;
@@ -222,15 +228,18 @@ void start(void) {
         ExitProcess(1);
     }
 
-    if ((read_saved_python() && launch()) ||
+    if ((bundled() && launch()) ||
+        (read_saved_python() && launch()) ||
         (on_path(L"pythonw.exe") && launch()) ||
         (under_local_appdata(L"\\Python\\bin\\pythonw.exe") && launch()) ||
         (on_path(L"pyw.exe") && launch()) ||
         (under_local_appdata(L"\\Microsoft\\WindowsApps\\pythonw.exe") && launch()))
         ExitProcess(0);
 
-    if (MessageBoxW(0, L"PianoPilot needs Python, and it isn't installed on this PC (or Windows can't find it).\n\n"
-                       L"Install Python from python.org, then open PianoPilot again.\n\n"
+    if (MessageBoxW(0, L"PianoPilot needs Python. Its own copy (the runtime folder) is missing, and Python "
+                       L"isn't installed on this PC either.\n\n"
+                       L"Download PianoPilot again (the download includes Python), or install Python from "
+                       L"python.org and open PianoPilot again.\n\n"
                        L"Open the Python download page now?",
                     TITLE, MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND) == IDYES)
         open_thing(L"https://www.python.org/downloads/");

@@ -1,4 +1,4 @@
-PianoPilot 0.8 - plays songs on Roblox pianos for you
+PianoPilot 1.0 - plays songs on Roblox pianos for you
 
 START
   Double-click PianoPilot.exe. The app window opens, with no command window.
@@ -7,13 +7,27 @@ START
 
   The first time, Windows may say "Windows protected your PC". Click More info, then Run anyway.
   Windows shows this for apps that aren't digitally signed by a known publisher. PianoPilot.exe is a tiny starter:
-  it only runs pianopilot.py with your Python. Its source code is in the launcher folder.
+  it only runs pianopilot.py with the Python in the runtime folder. Its source code is in the launcher folder.
+  Nothing needs installing: PianoPilot brings its own Python (the runtime folder). Keep that folder next to
+  PianoPilot.exe.
 
   "Start PianoPilot.bat" opens the same app with a small command window that shows what's going on.
   Use it if PianoPilot.exe doesn't start, or if your antivirus removes PianoPilot.exe.
 
   The first time it opens, a short welcome walks you through it. Help (bottom left, or press ?) has a
   quick start, your hotkeys and fixes for common problems.
+
+WHAT YOU NEED
+  - Windows 10 or 11, 64-bit. Microsoft Edge (already part of Windows) or Chrome shows the app window.
+  - Playing songs is light: about 70 MB of memory for PianoPilot plus a few hundred MB for its window,
+    and a small share of one CPU core. Any PC that runs Roblox runs PianoPilot.
+  - Roblox reads piano keys once per frame, so a steady 60 fps keeps fast notes clean. If fast songs drop
+    notes, lower Roblox's graphics quality first.
+  - Any keyboard layout works (QWERTY, AZERTY, QWERTZ...): Roblox reads keys by position, and PianoPilot
+    presses them by position.
+  - MP3 import (optional): an internet connection once, for the piano model (57 MB) and about 150 MB of
+    libraries. A graphics card with DirectX 12 (most from the last several years) makes it much faster;
+    without one it runs on the processor, just slower.
 
 PLAY A SONG
   1. In Roblox, sit at a piano. Close the chat box.
@@ -38,7 +52,7 @@ ADD SONGS
   Put in any of these and PianoPilot works out the rest:
   - MP3s and videos of piano music: turned into songs. Piano-only recordings come out best.
     The first time, PianoPilot sets this up (one click). It needs PianoModel.pianoscribe in your
-    Downloads folder and downloads about 150 MB of Python libraries.
+    Downloads folder and downloads about 150 MB of libraries into its own Python (the runtime folder).
   - MIDI files: added as they are.
   - Text piano sheets (like "[tu] y o | p") as .txt files: opens the sheet window to check the tempo.
   You can also drop files (or a whole folder) anywhere on the window, or put MIDI files in the Songs folder.
@@ -70,6 +84,8 @@ SETTINGS (gear, bottom left; apply to every song)
   custom key layout for unusual pianos. The calibration test sets most of these for you.
   Desktop and Start menu shortcuts. Start over: reset these settings, or every song's settings
   (your songs, favorites and queue always stay).
+  Updates: once a day PianoPilot asks GitHub whether a newer version is out, and shows a small note at the
+  top of the song list if there is. Nothing about you or your songs is sent. Turn it off in Settings.
   Calibration test: Settings, "Run the calibration test". It plays six short tests, asks whether each
   sounded right, and fixes the settings for you.
 
@@ -80,8 +96,12 @@ IF SOMETHING GOES WRONG
   - Nothing is pressed while Roblox runs as administrator: right-click PianoPilot.exe, Run as administrator.
   - PianoPilot closes right after starting: open data\pianopilot.log to see why (Help, "Open the log"),
     or start it with "Start PianoPilot.bat" to watch it in a command window.
-  - The command-window version still works: python piano_player.py song.mid (add --help for options).
-    It also plays text sheets: python piano_player.py sheet.txt --bpm 100
+  - The command-window version still works: runtime\python piano_player.py song.mid (add --help for
+    options). It also plays text sheets: runtime\python piano_player.py sheet.txt --bpm 100
+
+UPDATING TO A NEW VERSION
+  Download the new zip and unzip it over your PianoPilot folder (say yes to replacing files). Your songs
+  (Songs folder) and settings (data folder) stay as they are.
 
 A NOTE FROM WAAA
   PianoPilot started as a random idea and turned into a passion project. The goal was to test what AI
@@ -93,4 +113,5 @@ A NOTE FROM WAAA
 CREDITS
   Audio import uses the transcription engine from Pianoscribe by Justagwas (GPL-3.0) and the
   TransKun piano model by Yujia Yan (MIT). Fonts: Instrument Sans and Instrument Serif (SIL OFL).
-  See the license files in engine/pianoscribe_engine and ui/fonts.
+  The runtime folder is Python 3.13 (Python Software Foundation License) from the python-build-standalone
+  project. See the license files in engine/pianoscribe_engine, ui/fonts and runtime.

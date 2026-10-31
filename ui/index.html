@@ -136,6 +136,10 @@ details.details summary:hover { color: var(--ivory); }
 .meter i:nth-child(3) { height: 14px; } .meter i:nth-child(4) { height: 18px; }
 .meter i.on { background: var(--brass); }
 .playing-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--brass); margin-right: 7px; vertical-align: 1px; }
+.update-note { display: flex; align-items: center; gap: 10px; margin: 0 16px 12px; padding: 8px 10px 8px 12px; border: 1px solid rgba(211,165,74,.55); border-radius: 10px; background: #231B14; font-size: 13.5px; }
+.update-note span { flex: 1; min-width: 0; }
+.update-get { color: var(--brass-hi); font-weight: 600; text-decoration: none; }
+.update-get:hover { text-decoration: underline; }
 .lib-foot { padding: 10px 14px 14px 20px; color: var(--quiet); font-size: 13px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2px 8px; }
 #libCount { white-space: nowrap; }
 #simBadge { order: 3; flex-basis: 100%; }
@@ -379,6 +383,11 @@ details.adv > summary { padding: 14px 0; }
     <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="6" width="7" height="20" rx="1.6" fill="#EEE6D3"/><rect x="12.5" y="6" width="7" height="20" rx="1.6" fill="#EEE6D3"/><rect x="20" y="6" width="7" height="20" rx="1.6" fill="#EEE6D3"/><rect x="9.6" y="6" width="4.6" height="12" rx="1.1" fill="#D3A54A"/><rect x="17.6" y="6" width="4.6" height="12" rx="1.1" fill="#D3A54A"/></svg>
     <h1>PianoPilot</h1>
   </div>
+  <div class="update-note" id="updateNote" role="status" hidden>
+    <span id="updateText"></span>
+    <a class="update-get" id="updateGet" href="https://github.com/WaaaRBLX/PianoPilot/releases" target="_blank" rel="noopener">Download</a>
+    <button class="link-btn" id="updateHide" aria-label="Hide until the next version" title="Hide until the next version">✕</button>
+  </div>
   <div class="search"><label class="sr-only" for="search">Search songs</label><input id="search" type="search" placeholder="Search songs" autocomplete="off">
     <label class="sr-only" for="sortPick">Sort songs</label>
     <select class="pick sortpick" id="sortPick" title="Sort songs"><option value="name">A to Z</option><option value="recent">Recent</option><option value="length">Shortest</option><option value="difficulty">Easiest</option></select></div>
@@ -485,6 +494,12 @@ details.adv > summary { padding: 14px 0; }
       <h3>New songs</h3>
       <label class="check"><input type="checkbox" id="autoSetup"> Set up new songs for me</label>
       <p>Every song you add gets the “Best for this song” settings. You can still change anything afterwards.</p>
+    </div>
+    <div class="set-block">
+      <h3>Updates</h3>
+      <label class="check"><input type="checkbox" id="updateCheck"> Tell me when a new version is out</label>
+      <p>Once a day, PianoPilot asks GitHub for its newest version. Nothing about you or your songs is sent.</p>
+      <div class="row" style="margin-top:8px"><button class="btn" id="updateNow">Check now</button><span class="note" id="updateStatus" style="margin:0"></span></div>
     </div>
     <div class="set-block">
       <h3>Desktop and Start menu</h3>
@@ -599,6 +614,7 @@ details.adv > summary { padding: 14px 0; }
           <li><b>A song sounds messy:</b> press Best for this song under its title. Undo puts it back.</li>
           <li><b>Black keys sound like white keys:</b> in Settings, open Advanced and raise Black keys to about 20 ms.</li>
           <li><b>Fast notes blur together:</b> in Settings, open Advanced and raise Key hold time.</li>
+          <li><b>Fast songs drop notes:</b> Roblox reads keys once per frame, so keep it at a steady 60 fps. Lower Roblox's graphics quality first.</li>
           <li><b>The camera flips on black keys:</b> turn off Shift Lock Switch in Roblox's settings.</li>
           <li><b>Nothing gets pressed:</b> if Roblox runs as administrator, right-click PianoPilot.exe and choose Run as administrator.</li>
           <li><b>Some notes are missing:</b> the song goes past the piano's 61 keys. Press Best for this song, or try Best fit and 88 keys under More controls.</li>
@@ -704,6 +720,7 @@ function connect() {
     failures = 0; $("#banner").classList.remove("on");
     const d = JSON.parse(e.data);
     S.simulated = d.simulated; S.jobs = d.jobs; S.queue = d.queue || []; S.isWindows = d.is_windows; renderJobs();
+    if (d.update) renderUpdate(d.update);
     $("#simBadge").textContent = d.simulated ? "Test mode: no keys are sent" : "";
     setStatus(d.status);
     if (d.sig !== S.sig) loadLibrary();
@@ -720,6 +737,7 @@ function connect() {
   });
   es.addEventListener("library", e => { const d = JSON.parse(e.data); loadLibrary(d.select); });
   es.addEventListener("reset", () => afterReset());
+  es.addEventListener("update", e => renderUpdate(JSON.parse(e.data)));
   es.addEventListener("setup", () => { if (dlg.open) api("GET", "/api/audio/status").then(renderSetup).catch(() => {}); });
   es.onerror = () => {
     failures++;
@@ -1901,6 +1919,7 @@ function renderAppSettings() {
   if (!$("#layoutText").matches(":focus")) $("#layoutText").value = a.layout || S.standardLayout || "";
   if (!$("#layoutLowest").matches(":focus")) $("#layoutLowest").value = a.layout_lowest || 36;
   $("#autoSetup").checked = a.auto_setup !== false;
+  $("#updateCheck").checked = a.update_check !== false;
   const adv = [];
   if (a.shift_gap_ms) adv.push("Black keys");
   if (a.chord_window_ms !== 4) adv.push("Chord tightness");
@@ -1977,6 +1996,31 @@ async function refreshSong() {
   } catch (e) { /* ignore */ }
 }
 $("#autoSetup").addEventListener("change", e => { S.app.auto_setup = e.target.checked; saveApp({ auto_setup: e.target.checked }); });
+$("#updateCheck").addEventListener("change", e => {
+  S.app.update_check = e.target.checked; saveApp({ update_check: e.target.checked });
+  if (S.update) { S.update.enabled = e.target.checked; renderUpdate(); }
+});
+$("#updateNow").addEventListener("click", async () => {
+  const b = $("#updateNow"); b.disabled = true; $("#updateStatus").textContent = "Checking…";
+  try { renderUpdate(await api("POST", "/api/update")); }
+  catch (e) { $("#updateStatus").textContent = e.message; }
+  finally { b.disabled = false; }
+});
+
+// ---------- updates ----------
+function renderUpdate(u) {
+  if (u) S.update = u;
+  const x = S.update; if (!x) return;
+  const show = x.enabled && x.available && recall("skipUpdate", "") !== x.latest;
+  $("#updateNote").hidden = !show;
+  if (show) { $("#updateText").textContent = `PianoPilot ${x.latest} is out.`; $("#updateGet").href = x.url; }
+  const when = x.checked_at ? new Date(x.checked_at * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
+  $("#updateStatus").textContent = !x.checked_at ? `You have version ${x.current}. Not checked yet.`
+    : x.failed ? `You have version ${x.current}. Couldn't reach GitHub last time (${when}); it tries again in a few hours.`
+    : x.available ? `Version ${x.latest} is out. You have ${x.current}.`
+    : `You have the newest version (${x.current}). Checked ${when}.`;
+}
+$("#updateHide").addEventListener("click", () => { if (S.update && S.update.latest) store("skipUpdate", S.update.latest); renderUpdate(); });
 $("#chordWin").addEventListener("input", e => { S.app.chord_window_ms = +e.target.value; renderAppSettings(); saveApp({ chord_window_ms: +e.target.value }); });
 
 

@@ -3,8 +3,8 @@
 1 24 "app.manifest"
 
 1 VERSIONINFO
-FILEVERSION 0,8,0,0
-PRODUCTVERSION 0,8,0,0
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
 FILEFLAGSMASK 0x3F
 FILEFLAGS 0x0
 FILEOS 0x40004
@@ -17,12 +17,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Waaa"
       VALUE "FileDescription", "PianoPilot"
-      VALUE "FileVersion", "0.8.0"
+      VALUE "FileVersion", "1.0.0"
       VALUE "InternalName", "PianoPilot"
       VALUE "LegalCopyright", "Free and open source (GPL-3.0)"
       VALUE "OriginalFilename", "PianoPilot.exe"
       VALUE "ProductName", "PianoPilot"
-      VALUE "ProductVersion", "0.8.0"
+      VALUE "ProductVersion", "1.0.0"
     END
   END
   BLOCK "VarFileInfo"

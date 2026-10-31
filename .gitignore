@@ -8,3 +8,5 @@ Songs/*
 !Songs/Bach - Prelude in C (opening).mid
 # Built from launcher/ (it's in the download on the Releases page)
 PianoPilot.exe
+# The bundled Python is only in the download on the Releases page
+runtime/

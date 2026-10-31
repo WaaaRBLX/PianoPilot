@@ -20,6 +20,8 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.request
 import uuid
 import webbrowser
 import zipfile
@@ -87,7 +89,7 @@ sys.path.insert(0, str(APP_DIR))
 import piano_player as pp  # noqa: E402
 
 APP_NAME = "PianoPilot"
-VERSION = "0.8.0"
+VERSION = "1.0.0"
 SONGS_DIR = APP_DIR / "Songs"
 DATA_DIR = APP_DIR / "data"
 UI_DIR = APP_DIR / "ui"
@@ -359,6 +361,7 @@ APP_DEFAULTS = {
     "layout_lowest": 36,
     "has_88": None,              # does this piano play the 88-key extras? (answered in the calibration test)
     "auto_setup": True,          # give newly added songs the "Best for this song" settings
+    "update_check": True,        # once a day, ask GitHub whether a newer version is out
 }
 
 
@@ -439,6 +442,7 @@ def clean_app_settings(raw):
             "key_hold_ms": _int(raw.get("key_hold_ms", 20), 20, 10, 120),
             "has_88": raw.get("has_88") if isinstance(raw.get("has_88"), bool) else None,
             "auto_setup": raw.get("auto_setup", True) is not False,
+            "update_check": raw.get("update_check", True) is not False,
             **clean_layout(raw.get("layout", ""), raw.get("layout_lowest", 36))}
 
 
@@ -1623,6 +1627,94 @@ class AudioImport:
         EVENTS.send("library", {"sig": self.library.sig, "select": key})
 
 
+# ========================== UPDATE CHECK ============================
+
+RELEASES_API = "https://api.github.com/repos/WaaaRBLX/PianoPilot/releases/latest"
+RELEASES_PAGE = "https://github.com/WaaaRBLX/PianoPilot/releases"
+UPDATE_EVERY = 24 * 3600            # seconds between checks
+UPDATE_RETRY = 3 * 3600             # after a failed check (offline, say)
+
+
+def version_tuple(text):
+    """'v1.2.3' or '1.2' -> (1, 2, 3) / (1, 2, 0). Anything after a dash (like -beta) is ignored."""
+    parts = []
+    for piece in str(text or "").strip().lstrip("vV").split("-")[0].split(".")[:3]:
+        digits = "".join(ch for ch in piece if ch.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts + [0] * (3 - len(parts)))
+
+
+class UpdateCheck:
+    """Once a day, asks GitHub for the newest full release (beta releases don't count) and tells the window
+    when it's newer than this copy. Only that one request is made; nothing about you or your songs is sent."""
+
+    def __init__(self, settings):
+        self.settings = settings
+        self.lock = threading.Lock()
+        saved = settings.app("update")
+        self.state = saved if isinstance(saved, dict) else {}
+
+    def enabled(self):
+        return clean_app_settings(self.settings.app("player"))["update_check"]
+
+    def info(self):
+        with self.lock:
+            state = dict(self.state)
+        latest = state.get("latest") if isinstance(state.get("latest"), str) else None
+        newer = bool(latest) and version_tuple(latest) > version_tuple(VERSION)
+        url = state.get("url") if isinstance(state.get("url"), str) and state.get("url", "").startswith(
+            "https://github.com/WaaaRBLX/PianoPilot/") else RELEASES_PAGE
+        return {"enabled": self.enabled(), "current": VERSION, "latest": latest, "available": newer,
+                "url": url, "checked_at": state.get("checked_at"), "failed": bool(state.get("failed"))}
+
+    def check(self):
+        request = urllib.request.Request(RELEASES_API, headers={
+            "User-Agent": f"PianoPilot/{VERSION}", "Accept": "application/vnd.github+json"})
+        now = time.time()
+        try:
+            with urllib.request.urlopen(request, timeout=10) as answer:
+                data = json.loads(answer.read(200_000).decode("utf-8"))
+            tag = str(data.get("tag_name") or "").strip()[:40]
+            url = str(data.get("html_url") or "")
+            state = {"checked_at": now, "latest": tag.lstrip("vV") or None,
+                     "url": url if url.startswith("https://github.com/WaaaRBLX/PianoPilot/") else RELEASES_PAGE}
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:                 # no full release published yet
+                state = {"checked_at": now, "latest": None, "url": RELEASES_PAGE}
+            else:
+                state = dict(self.state, checked_at=now, failed=True)
+        except Exception:
+            state = dict(self.state, checked_at=now, failed=True)
+        with self.lock:
+            self.state = state
+        try:
+            self.settings.set_app("update", state)
+        except Exception:
+            traceback.print_exc()
+        info = self.info()
+        EVENTS.send("update", info)
+        return info
+
+    def run(self):
+        time.sleep(20)                          # let the app settle first
+        while True:
+            try:
+                with self.lock:
+                    last = self.state.get("checked_at") or 0
+                    wait = UPDATE_RETRY if self.state.get("failed") else UPDATE_EVERY
+                if self.enabled() and time.time() - float(last) >= wait:
+                    self.check()
+            except Exception:
+                traceback.print_exc()
+            time.sleep(600)
+
+
+def api_update(h, query):
+    if h.command == "POST":
+        return APP.updates.check()
+    return APP.updates.info()
+
+
 # ============================== SERVER ==============================
 
 class ApiError(Exception):
@@ -1644,6 +1736,7 @@ class App:
         self.playback = Playback(self.library, self.queue)
         self.hotkeys = HotkeyWatcher(self.playback, self.settings)
         self.audio = AudioImport(self.library, self.settings)
+        self.updates = UpdateCheck(self.settings)
 
     def set_up_new_songs(self, keys):
         handled, made, revs = setup_new_songs(self.library, self.settings, keys)
@@ -1778,7 +1871,8 @@ class Handler(BaseHTTPRequestHandler):
         q = EVENTS.add()
         try:
             hello = {"status": APP.playback.status, "jobs": APP.audio.jobs_view(), "sig": APP.library.sig,
-                     "simulated": SIMULATE, "queue": APP.queue.items(), "is_windows": IS_WINDOWS}
+                     "simulated": SIMULATE, "queue": APP.queue.items(), "is_windows": IS_WINDOWS,
+                     "update": APP.updates.info()}
             self.wfile.write(f"event: hello\ndata: {json.dumps(hello)}\n\n".encode("utf-8"))
             self.wfile.flush()
             while True:
@@ -2549,6 +2643,8 @@ ROUTES = {
     ("POST", "/api/song/best-fit"): api_best_fit,
     ("POST", "/api/song/best"): api_song_best,
     ("POST", "/api/song/delete"): api_song_delete,
+    ("GET", "/api/update"): api_update,
+    ("POST", "/api/update"): api_update,
     ("GET", "/api/ui"): api_ui,
     ("POST", "/api/ui"): api_ui,
     ("POST", "/api/play"): api_play,
@@ -2760,6 +2856,8 @@ def main():
         threading.Thread(target=APP.library.watch, name="library", daemon=True).start()
         threading.Thread(target=APP.hotkeys.run, name="hotkeys", daemon=True).start()
         threading.Thread(target=watch_for_close, args=(server,), name="close-watch", daemon=True).start()
+        if not SIMULATE:
+            threading.Thread(target=APP.updates.run, name="updates", daemon=True).start()
         log(f"{APP_NAME} {VERSION} running at {url}")
         log(f"Songs folder: {SONGS_DIR}")
         if SIMULATE:
