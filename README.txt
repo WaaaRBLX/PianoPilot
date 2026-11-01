@@ -34,7 +34,8 @@ PLAY A SONG
   1. In Roblox, sit at a piano. Close the chat box.
   2. In PianoPilot, click a song, then press Play (or Space).
      Not sure about the settings? Press "Best for this song" under the title first.
-  3. Click into the Roblox window. It counts down 3 seconds and plays.
+  3. Click into the Roblox window. It counts down 3 seconds and plays (change the countdown in
+     Settings). Pressing F6 while you're already in Roblox starts right away.
   Clicking out of Roblox pauses it automatically, so it never types into other windows.
 
 HOTKEYS (work while Roblox is in front; change them in Settings. Inside PianoPilot, Home, End and
@@ -43,9 +44,20 @@ Page Up/Down keep their usual jobs, so those four only work in Roblox)
   Page Down slower   Page Up faster    End next song in the queue
 
 PLAYING SEVERAL SONGS
+  - Play, Shuffle and Smart shuffle sit above every list (all songs, favorites, a playlist, even your
+    search results). The first song starts and the rest go in the queue. If that replaces a queue you
+    had, the message that pops up can bring the old one back.
+  - Smart shuffle plays your favorites and songs you haven't heard in a while more often, and songs
+    you usually skip less often, and never the same artist twice in a row ("Artist - Song" names).
+    On a playlist or your favorites it mixes in a few similar songs from your library, marked with a small sparkle.
+  - Playlists: make them in the Playlists tab, then press Add songs, or right-click any song and
+    choose "Add to playlist". The song page has an "Add to playlist" button too.
+  - Right-click any song (or press the menu key) to play it, play it next, queue it or add it to a playlist.
   - Queue: point at a song and press +, or use "Add to queue" / "Play next". Queued songs play one
-    after another. The Queue tab can shuffle, reorder or clear it, or shuffle every song in.
-  - Favorites: press the star. Sort the list by name, recently played, length or difficulty.
+    after another. The Queue tab can shuffle, reorder or clear it. Switch on "Keep playing when the
+    queue ends" and Smart shuffle carries on after the last song.
+  - Favorites: press the star. Sort the list by name, recently played, most played, newest, length or
+    difficulty. Each song's play count is in "Song details and text sheet".
   - Mini player: "Open the mini player" opens a small window that stays on top of Roblox.
 
 ADD SONGS
@@ -95,6 +107,8 @@ IF SOMETHING GOES WRONG
   - Something sounds off: run the calibration test (Settings) first, then try Best for this song.
   - Black keys sound like white keys: Settings, Advanced, raise "Black keys" to about 20 ms.
   - Camera flips on black keys: turn off "Shift Lock Switch" in Roblox settings.
+  - Fast songs drop notes: Roblox reads keys once per frame. Keep it at a steady 60 fps (lower its graphics
+    quality), or raise "Maximum Frame Rate" in Roblox's settings to 120 or more if your PC and screen can.
   - Nothing is pressed while Roblox runs as administrator: right-click PianoPilot.exe, Run as administrator.
   - PianoPilot closes right after starting: open data\pianopilot.log to see why (Help, "Open the log"),
     or start it with "Start PianoPilot.bat" to watch it in a command window.

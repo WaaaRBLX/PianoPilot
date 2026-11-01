@@ -101,13 +101,43 @@ details.details summary:hover { color: var(--ivory); }
 .cal-msg { margin: 10px 0 0; color: var(--brass-hi) !important; }
 .cal-msg:empty, .cal-status:empty { display: none; }
 .cal-status { margin: 10px 0 0; color: var(--quiet) !important; font-size: 13px; }
-.tabbar { display: flex; align-items: center; gap: 4px; padding: 0 16px 8px; }
-.tab { height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--ivory-2); }
+.tabbar { display: flex; align-items: center; gap: 0; padding: 0 12px 8px; overflow-x: auto; scrollbar-width: none; }
+.tab { flex: none; height: 30px; padding: 0 7px; border: 0; border-radius: 8px; background: none; color: var(--ivory-2); }
+.library { container-type: inline-size; }
+@container (max-width: 330px) { .tab .n { display: none; } }          /* a narrow list: the tabs keep their names, not the counts */
+@container (max-width: 300px) { .tab { padding: 0 5px; font-size: 14px; } }
 .tab:hover { color: var(--ivory); background: var(--raised); }
 .tab[aria-selected="true"] { color: var(--ivory); background: var(--raised); box-shadow: inset 0 -2px 0 var(--brass); }
-.tab .n { color: var(--quiet); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.tab .n { color: var(--quiet); margin-left: 3px; font-variant-numeric: tabular-nums; }
 .sortpick { flex: none; width: 104px; height: 38px; font-size: 13px; padding: 0 26px 0 10px; background-position: right 8px center; }
-.queue-bar { display: flex; gap: 8px; padding: 0 16px 8px; align-items: center; color: var(--quiet); font-size: 13px; }
+.queue-bar { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 0 16px 8px; align-items: center; color: var(--quiet); font-size: 13px; }
+.queue-bar .check { padding-top: 2px; color: var(--ivory-2); gap: 8px; }
+.queue-bar .check input { width: 16px; height: 16px; }
+.list-bar { padding: 0 16px 8px; display: grid; gap: 8px; }
+.play-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.chip { height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--ivory);
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.chip:hover { background: #352B43; border-color: #4A3F5A; }
+.chip svg { flex: none; color: var(--brass-hi); }
+.chip.quiet { background: none; }
+.pl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pl-head .back { font-size: 13px; color: var(--ivory-2); padding-left: 0; }
+.pl-name { margin: 0; font: 400 26px/1.1 var(--serif); overflow-wrap: anywhere; }
+.pl-sum { margin: -4px 0 0; color: var(--quiet); font-size: 13px; }
+.smart-mark { color: var(--brass); margin-right: 5px; }
+.ctx-menu { position: fixed; top: 0; left: 0; right: auto; min-width: 230px; max-width: 320px; max-height: 70vh; overflow-y: auto; z-index: 60; }
+.menu button:disabled { color: var(--quiet); background: none; cursor: default; }
+.menu .sep { height: 1px; background: var(--line); margin: 4px 6px; }
+.menu .menu-title { padding: 6px 12px 4px; color: var(--quiet); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-list { list-style: none; margin: 10px 0 14px; padding: 4px; max-height: 46vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--well); }
+.pick-list label { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.pick-list label:hover { background: var(--raised); }
+.pick-list input { width: 18px; height: 18px; accent-color: var(--brass); margin: 0; flex: none; }
+.pick-list .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-list .s { color: var(--quiet); font-size: 13px; flex: none; }
+.pick-list .in label { cursor: default; color: var(--quiet); }
+.pick-tools { display: flex; align-items: center; gap: 10px; }
+.pick-tools .text-in { flex: 1; min-width: 0; }
 .queue-bar .link-btn { color: var(--ivory-2); }
 .songs { list-style: none; margin: 0; padding: 0 8px 8px; overflow-y: auto; flex: 1; min-height: 0; }
 .songs > li { position: relative; }
@@ -267,6 +297,9 @@ select.pick { height: 34px; padding: 0 30px 0 12px; border-radius: 9px; border: 
 }
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
 .toast.bad { border-color: var(--rose); color: #F1C9C9; }
+.toast:not(.on) { pointer-events: none; }
+.toast-act { margin-left: 12px; border: 0; background: none; padding: 0; color: var(--brass-hi); font: inherit; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px; }
 .banner { position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: #3A1F28; color: #F1C9C9; padding: 10px 20px; display: none; }
 .banner.on { display: block; }
 
@@ -390,7 +423,7 @@ details.adv > summary { padding: 14px 0; }
   </div>
   <div class="search"><label class="sr-only" for="search">Search songs</label><input id="search" type="search" placeholder="Search songs" autocomplete="off">
     <label class="sr-only" for="sortPick">Sort songs</label>
-    <select class="pick sortpick" id="sortPick" title="Sort songs"><option value="name">A to Z</option><option value="recent">Recent</option><option value="length">Shortest</option><option value="difficulty">Easiest</option></select></div>
+    <select class="pick sortpick" id="sortPick" title="Sort songs"><option value="name">A to Z</option><option value="recent">Recent</option><option value="plays">Most played</option><option value="added">Newest</option><option value="length">Shortest</option><option value="difficulty">Easiest</option></select></div>
   <div class="lib-actions">
     <button class="btn primary" id="addBtn" title="Add an MP3, video, MIDI file or text sheet"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a song</button>
     <span class="menu-wrap">
@@ -408,8 +441,10 @@ details.adv > summary { padding: 14px 0; }
   <div class="tabbar" role="tablist" aria-label="Song lists">
     <button class="tab" role="tab" data-tab="songs" aria-selected="true">Songs</button>
     <button class="tab" role="tab" data-tab="favorites" aria-selected="false">Favorites<span class="n" id="favCount"></span></button>
+    <button class="tab" role="tab" data-tab="playlists" aria-selected="false">Playlists<span class="n" id="plCount"></span></button>
     <button class="tab" role="tab" data-tab="queue" aria-selected="false">Queue<span class="n" id="queueCount"></span></button>
   </div>
+  <div class="list-bar" id="listBar" hidden></div>
   <div class="queue-bar" id="queueBar" hidden></div>
   <ul class="songs" id="songs" aria-label="Song list"></ul>
   <div class="lib-foot"><span id="libCount"></span><span id="simBadge"></span>
@@ -423,6 +458,7 @@ details.adv > summary { padding: 14px 0; }
 
 <div class="drop" id="drop" aria-hidden="true"><div><h2>Drop to add songs</h2><p>MP3s and videos are converted. MIDI files and text sheets are added as they are.</p></div></div>
 <div class="toast" id="toast" role="status"></div>
+<div class="menu ctx-menu" id="ctxMenu" role="menu" hidden></div>
 
 <dialog id="addDlg" class="add-dlg" aria-labelledby="addTitle">
   <div class="dlg">
@@ -489,6 +525,12 @@ details.adv > summary { padding: 14px 0; }
       <h3>Hotkeys</h3>
       <p id="hotkeyIntro">Work while Roblox is in front, and inside PianoPilot (where Home, End and the Page keys still scroll). Click a box, then press F1 to F12, Home, End, Insert, Delete, Page Up, Page Down or Pause. Backspace turns one off.</p>
       <div id="hotkeyRows" style="margin-top:6px"></div>
+    </div>
+    <div class="set-block">
+      <h3>Starting a song</h3>
+      <p id="countdownIntro">After you press Play here and click into Roblox, PianoPilot counts down before the first note.</p>
+      <div class="row" style="margin-top:8px"><label for="countdownPick">Countdown</label>
+        <select class="pick" id="countdownPick" style="width:150px"><option value="5">5 seconds</option><option value="3">3 seconds</option><option value="2">2 seconds</option><option value="1">1 second</option><option value="0">None</option></select></div>
     </div>
     <div class="set-block">
       <h3>New songs</h3>
@@ -571,6 +613,24 @@ details.adv > summary { padding: 14px 0; }
   </div>
 </dialog>
 
+<dialog id="plDlg" class="small-dlg" aria-labelledby="plDlgTitle">
+  <form class="dlg" id="plForm" method="dialog">
+    <h2 id="plDlgTitle">New playlist</h2>
+    <label class="field"><span>Name</span><input class="text-in" id="plName" maxlength="60" autocomplete="off"></label>
+    <div class="dlg-actions"><button class="btn" type="button" id="plCancel">Cancel</button><button class="btn primary" type="submit" id="plSave">Make playlist</button></div>
+  </form>
+</dialog>
+
+<dialog id="pickDlg" aria-labelledby="pickTitle">
+  <div class="dlg">
+    <h2 id="pickTitle">Add songs</h2>
+    <div class="pick-tools"><input class="text-in" id="pickSearch" type="search" placeholder="Search songs" autocomplete="off" aria-label="Search songs">
+      <button class="link-btn" id="pickAll">Select all shown</button></div>
+    <ul class="pick-list" id="pickList"></ul>
+    <div class="dlg-actions"><span class="grow" id="pickCount"></span><button class="btn" id="pickCancel">Cancel</button><button class="btn primary" id="pickAdd" disabled>Add songs</button></div>
+  </div>
+</dialog>
+
 <dialog id="delDlg" class="small-dlg" aria-labelledby="delTitle" aria-describedby="delText">
   <div class="dlg">
     <h2 id="delTitle">Delete this song?</h2>
@@ -589,7 +649,7 @@ details.adv > summary { padding: 14px 0; }
         <ol class="steps">
           <li><div><strong>Sit at a piano in Roblox</strong><div class="s-text">Close the chat box first, or the notes get typed into it.</div></div></li>
           <li><div><strong>Pick a song here and press Play</strong><div class="s-text">Or press Space. Best for this song (under the title) picks good settings for you; Speed, Play like and the rest are below the song map.</div></div></li>
-          <li><div><strong>Click into the Roblox window</strong><div class="s-text">It counts down from 3, then plays.</div></div></li>
+          <li><div><strong>Click into the Roblox window</strong><div class="s-text">It counts down from 3, then plays (change the countdown in Settings). Pressing F6 inside Roblox starts right away.</div></div></li>
           <li><div><strong>Click out of Roblox to pause</strong><div class="s-text">It never types into other windows. Click back into Roblox to carry on.</div></div></li>
         </ol>
       </section>
@@ -608,13 +668,22 @@ details.adv > summary { padding: 14px 0; }
         </ul>
       </section>
       <section class="help-sec">
+        <h3>Playlists and shuffle</h3>
+        <ul class="fixes">
+          <li><b>Play, Shuffle and Smart shuffle</b> sit above every list: all songs, favorites, a playlist, even search results. The first song starts and the rest go in the queue.</li>
+          <li><b>Smart shuffle</b> plays your favorites and songs you haven't heard in a while more often, and songs you skip less often. On a playlist it mixes in a few similar songs, marked ✦.</li>
+          <li><b>Right-click any song</b> to play it next, queue it, or add it to a playlist. Make playlists in the Playlists tab.</li>
+          <li><b>Keep playing</b> (in the Queue tab) carries on with Smart shuffle when the queue runs out.</li>
+        </ul>
+      </section>
+      <section class="help-sec">
         <h3>If something sounds off</h3>
         <ul class="fixes">
           <li><b>Start here:</b> run the calibration test in Settings. It fixes most problems for you.</li>
           <li><b>A song sounds messy:</b> press Best for this song under its title. Undo puts it back.</li>
           <li><b>Black keys sound like white keys:</b> in Settings, open Advanced and raise Black keys to about 20 ms.</li>
           <li><b>Fast notes blur together:</b> in Settings, open Advanced and raise Key hold time.</li>
-          <li><b>Fast songs drop notes:</b> Roblox reads keys once per frame, so keep it at a steady 60 fps. Lower Roblox's graphics quality first.</li>
+          <li><b>Fast songs drop notes:</b> Roblox reads keys once per frame, so keep it at a steady 60 fps (lower Roblox's graphics quality first). If your PC and screen can, raise Maximum Frame Rate in Roblox's settings to 120 or more: Roblox then reads keys twice as often.</li>
           <li><b>The camera flips on black keys:</b> turn off Shift Lock Switch in Roblox's settings.</li>
           <li><b>Nothing gets pressed:</b> if Roblox runs as administrator, right-click PianoPilot.exe and choose Run as administrator.</li>
           <li><b>Some notes are missing:</b> the song goes past the piano's 61 keys. Press Best for this song, or try Best fit and 88 keys under More controls.</li>
@@ -689,9 +758,14 @@ function fmt(sec) {
 function ext(name) { const i = name.lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 let toastTimer;
-function toast(text, bad = false) {
+function toast(text, bad = false, action = null) {
   const t = $("#toast"); t.textContent = text; t.classList.toggle("bad", bad); t.classList.add("on");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), bad ? 6000 : 3200);
+  if (action) {          // one button, like Undo
+    const b = document.createElement("button"); b.className = "toast-act"; b.textContent = action.label;
+    b.addEventListener("click", () => { t.classList.remove("on"); action.run(); });
+    t.append(b);
+  }
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), bad ? 6000 : action ? 9000 : 3200);
 }
 function debounce(fn, ms) {
   let t = null, args = [], running = Promise.resolve();
@@ -720,6 +794,7 @@ function connect() {
     failures = 0; $("#banner").classList.remove("on");
     const d = JSON.parse(e.data);
     S.simulated = d.simulated; S.jobs = d.jobs; S.queue = d.queue || []; S.isWindows = d.is_windows; renderJobs();
+    S.queueExtra = d.queue_extra || []; S.playlists = d.playlists || []; renderLibrary();
     if (d.update) renderUpdate(d.update);
     $("#simBadge").textContent = d.simulated ? "Test mode: no keys are sent" : "";
     setStatus(d.status);
@@ -728,7 +803,12 @@ function connect() {
   es.addEventListener("status", e => setStatus(JSON.parse(e.data)));
   es.addEventListener("jobs", e => { S.jobs = JSON.parse(e.data); renderJobs(); });
   es.addEventListener("notice", e => { const d = JSON.parse(e.data); toast(d.text, !!d.bad); });
-  es.addEventListener("queue", e => { S.queue = JSON.parse(e.data).items; renderLibrary(); renderStatus(); });
+  es.addEventListener("queue", e => { const d = JSON.parse(e.data); S.queue = d.items; S.queueExtra = d.extras || []; renderLibrary(); renderStatus(); });
+  es.addEventListener("playlists", e => { S.playlists = JSON.parse(e.data).items; renderLibrary(); if (pickDlg.open) renderPick(); });
+  es.addEventListener("plays", e => {
+    const d = JSON.parse(e.data); const s = S.songs.find(x => x.key === d.key);
+    if (s) { s.plays = d.plays; if (S.sort === "plays") renderLibrary(); }
+  });
   es.addEventListener("favorites", e => applyFavorites(JSON.parse(e.data).keys));
   es.addEventListener("song-settings", e => {
     const d = JSON.parse(e.data);
@@ -778,12 +858,14 @@ async function loadLibrary(select) {
 
 function store(name, value) { try { localStorage.setItem("pp." + name, value); } catch (e) { /* storage unavailable */ } }
 function recall(name, fallback) { try { return localStorage.getItem("pp." + name) || fallback; } catch (e) { return fallback; } }
-S.tab = "songs"; S.sort = recall("sort", "name"); S.queue = [];
+S.tab = "songs"; S.sort = recall("sort", "name"); S.queue = []; S.queueExtra = []; S.playlists = []; S.openPl = null;
 
 function sortedSongs(list) {
   const by = {
     name: (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
     recent: (a, b) => (b.played || 0) - (a.played || 0) || a.title.localeCompare(b.title),
+    plays: (a, b) => (b.plays || 0) - (a.plays || 0) || (b.played || 0) - (a.played || 0) || a.title.localeCompare(b.title),
+    added: (a, b) => (b.added || 0) - (a.added || 0) || a.title.localeCompare(b.title),
     length: (a, b) => (a.duration || 0) - (b.duration || 0),
     difficulty: (a, b) => (a.nps || 0) - (b.nps || 0),
   }[S.sort] || ((a, b) => 0);
@@ -807,23 +889,28 @@ function renderLibrary() {
   const favs = S.songs.filter(s => s.favorite);
   $("#libCount").textContent = S.songs.length === 1 ? "1 song" : `${S.songs.length} songs`;
   $("#favCount").textContent = favs.length ? String(favs.length) : "";
+  $("#plCount").textContent = S.playlists.length ? String(S.playlists.length) : "";
   $("#queueCount").textContent = S.queue.length ? String(S.queue.length) : "";
   document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === S.tab)));
-  $("#sortPick").disabled = S.tab === "queue"; $("#sortPick").value = S.sort;
-  const bar = $("#queueBar");
-  bar.hidden = S.tab !== "queue";
+  $("#sortPick").disabled = S.tab === "queue" || S.tab === "playlists"; $("#sortPick").value = S.sort;
+  const bar = $("#queueBar"), lb = $("#listBar");
+  bar.hidden = S.tab !== "queue"; lb.hidden = true;
   if (S.tab === "queue") {
-    bar.innerHTML = S.queue.length
-      ? `<span>Plays in this order after the current song.</span><button class="link-btn" data-q="shuffle">Shuffle</button><button class="link-btn" data-q="clear">Clear</button>`
-      : `<button class="link-btn" data-q="shuffle_all">Shuffle all songs into the queue</button>`;
-    if (!S.queue.length) { ul.innerHTML = `<li class="empty-lib"><p>The queue is empty.</p><p>Point at a song and press + to add it. Queued songs play one after another.</p></li>`; return; }
+    const keep = `<label class="check"><input type="checkbox" id="keepPlaying"${S.app && S.app.keep_playing ? " checked" : ""}> Keep playing when the queue ends</label>${hint("keep")}`;
+    bar.innerHTML = (S.queue.length
+      ? `<span>Plays after the current song.</span><span style="margin-left:auto;display:flex;gap:4px"><button class="link-btn" data-q="shuffle">Shuffle</button><button class="link-btn" data-q="clear">Clear</button></span>`
+      : `<button class="link-btn" data-q="shuffle_all">Shuffle all songs into the queue</button>`) + `<span style="flex-basis:100%;display:flex;align-items:center;gap:6px">${keep}</span>`;
+    if (!S.queue.length) { ul.innerHTML = `<li class="empty-lib"><p>The queue is empty.</p><p>Point at a song and press + to add it, or use Play or Shuffle on any list. Queued songs play one after another.</p></li>`; return; }
+    const extras = new Set(S.queueExtra);
     ul.innerHTML = S.queue.map((key, i) => {
       const song = byKey.get(key) || { key, title: key.replace(/\.midi?$/i, ""), difficulty: "", duration: 0, error: "missing" };
       const tools = `${i ? `<button class="tool" data-qmove="${i}" title="Move up" aria-label="Move up">↑</button>` : ""}<button class="tool" data-qremove="${i}" title="Remove from queue" aria-label="Remove from queue">✕</button>`;
-      return songRow(song, `<span class="qnum">${i + 1}</span>`, tools);
+      const mark = extras.has(key) ? `<span class="smart-mark" title="Mixed in by Smart shuffle">✦</span>` : "";
+      return songRow(song, `<span class="qnum">${i + 1}</span>${mark}`, tools);
     }).join("");
     return;
   }
+  if (S.tab === "playlists") { renderPlaylists(ul, lb, q, byKey); return; }
   const pool = S.tab === "favorites" ? favs : S.songs;
   const list = sortedSongs(pool.filter(s => !q || s.title.toLowerCase().includes(q)));
   if (!S.songs.length) {
@@ -832,10 +919,290 @@ function renderLibrary() {
   }
   if (S.tab === "favorites" && !favs.length) { ul.innerHTML = `<li class="empty-lib"><p>No favorites yet.</p><p>Point at a song and press ☆ to add it here.</p></li>`; return; }
   if (!list.length) { ul.innerHTML = `<li class="empty-lib"><p>No songs match “${esc(S.search)}”.</p></li>`; return; }
+  const playable = list.filter(s => !s.error);
+  if (playable.length) { lb.hidden = false; lb.innerHTML = playRow(); }
   ul.innerHTML = list.map(s => songRow(s, "", s.error ? "" :
     `<button class="tool" data-fav="${esc(s.key)}" aria-pressed="${!!s.favorite}" title="${s.favorite ? "Remove from favorites" : "Add to favorites"}" aria-label="Favorite">${s.favorite ? "★" : "☆"}</button>` +
     `<button class="tool" data-queue="${esc(s.key)}" title="Add to queue" aria-label="Add to queue">+</button>`)).join("");
 }
+
+// ---------- playlists, Play and Shuffle ----------
+const ICON = {
+  play: `<svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14.5-8.5z" fill="currentColor"/></svg>`,
+  shuffle: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>`,
+  smart: `<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" fill="currentColor"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" fill="currentColor"/></svg>`,
+};
+function playRow() {
+  return `<div class="play-row"><button class="chip" data-play="order" title="Play these songs from the top">${ICON.play}Play</button>
+    <button class="chip" data-play="shuffle" title="Play these songs in a random order">${ICON.shuffle}Shuffle</button>
+    <button class="chip" data-play="smart" title="Shuffle that plays what you like more often">${ICON.smart}Smart shuffle</button>${hint("smart")}</div>`;
+}
+function fmtTotal(sec) {
+  const m = Math.max(1, Math.round((sec || 0) / 60));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+}
+function listSummary(keys) {
+  const by = new Map(S.songs.map(s => [s.key, s]));
+  const total = keys.reduce((t, k) => t + ((by.get(k) || {}).duration || 0), 0);
+  return (keys.length === 1 ? "1 song" : `${keys.length} songs`) + (keys.length ? `, ${fmtTotal(total)}` : "");
+}
+function openPlaylist() { return S.openPl ? S.playlists.find(p => p.id === S.openPl) || null : null; }
+function renderPlaylists(ul, lb, q, byKey) {
+  const pl = openPlaylist();
+  S.openPl = pl ? pl.id : null;
+  lb.hidden = false;
+  if (!pl) {
+    lb.innerHTML = `<div class="play-row"><button class="chip" data-pl="new"><span aria-hidden="true">+</span> New playlist</button></div>`;
+    if (!S.playlists.length) { ul.innerHTML = `<li class="empty-lib"><p>No playlists yet.</p><p>Press New playlist, or right-click any song and choose Add to playlist.</p></li>`; return; }
+    const list = S.playlists.filter(p => !q || p.name.toLowerCase().includes(q));
+    if (!list.length) { ul.innerHTML = `<li class="empty-lib"><p>No playlists match “${esc(S.search)}”.</p></li>`; return; }
+    ul.innerHTML = list.map(p => `<li><button class="song pl-row" data-open-pl="${esc(p.id)}"><span class="song-title" title="${esc(p.name)}">${esc(p.name)}</span>
+        <span class="song-sub"><span>${listSummary(p.songs.filter(k => byKey.has(k)))}</span></span></button>
+        <span class="row-tools"><button class="tool" data-pl-play="${esc(p.id)}" title="Play ${esc(p.name)}" aria-label="Play ${esc(p.name)}">${ICON.play}</button></span></li>`).join("");
+    return;
+  }
+  const keys = pl.songs.filter(k => byKey.has(k));
+  lb.innerHTML = `<div class="pl-head"><button class="link-btn back" data-pl="back">‹ All playlists</button>
+      <button class="tool" data-pl="menu" title="Rename or delete this playlist" aria-label="Playlist options" aria-haspopup="menu">⋯</button></div>
+    <h2 class="pl-name">${esc(pl.name)}</h2><p class="pl-sum">${listSummary(keys)}</p>
+    ${keys.length ? playRow() : ""}<div class="play-row"><button class="chip quiet" data-pl="add"><span aria-hidden="true">+</span> Add songs</button></div>`;
+  if (!keys.length) { ul.innerHTML = `<li class="empty-lib"><p>This playlist is empty.</p><p>Press Add songs, or right-click any song and choose Add to playlist.</p></li>`; return; }
+  const rows = pl.songs.map((k, i) => [k, i]).filter(([k]) => byKey.has(k) && (!q || byKey.get(k).title.toLowerCase().includes(q)));
+  if (!rows.length) { ul.innerHTML = `<li class="empty-lib"><p>No songs in this playlist match “${esc(S.search)}”.</p></li>`; return; }
+  ul.innerHTML = rows.map(([k, i], n) => {
+    const tools = `${i ? `<button class="tool" data-plmove="${i}" title="Move up" aria-label="Move up">↑</button>` : ""}<button class="tool" data-plremove="${i}" data-key="${esc(k)}" title="Remove from this playlist" aria-label="Remove from this playlist">✕</button>`;
+    return songRow(byKey.get(k), `<span class="qnum">${n + 1}</span>`, tools).replace("<li>", `<li data-pl-index="${i}">`);
+  }).join("");
+}
+function visibleKeys() {
+  const q = S.search.trim().toLowerCase();
+  const match = s => s && !s.error && (!q || s.title.toLowerCase().includes(q));
+  if (S.tab === "playlists") {
+    const pl = openPlaylist(); if (!pl) return [];
+    const by = new Map(S.songs.map(s => [s.key, s]));
+    return pl.songs.filter(k => match(by.get(k)));
+  }
+  const pool = S.tab === "favorites" ? S.songs.filter(s => s.favorite) : S.songs;
+  return sortedSongs(pool.filter(match)).map(s => s.key);
+}
+function listLabel(n) {
+  const songs = n === 1 ? "1 song" : `${n} songs`;
+  if (S.tab === "playlists" && openPlaylist()) return `${openPlaylist().name} (${songs})`;
+  if (S.tab === "favorites" && !S.search.trim()) return `your favorites (${songs})`;
+  return songs;
+}
+async function playList(keys, mode, label) {
+  if (!keys.length) return;
+  try {
+    const d = await api("POST", "/api/play-list", { keys, mode });
+    S.queue = d.items; S.queueExtra = d.extras || [];
+    const prev = (d.previous && d.previous.items) || [];
+    let text = mode === "order" ? `Playing ${label}.` : mode === "shuffle" ? `Shuffling ${label}.`
+      : `Smart shuffling ${label}` + (d.mixed_in ? `, with ${d.mixed_in} similar ${d.mixed_in === 1 ? "song" : "songs"} mixed in (✦).` : ".");
+    renderLibrary(); renderStatus();
+    if (d.playing && d.playing !== S.selected) selectSong(d.playing);
+    if (prev.length) {
+      toast(`${text} That replaced your queue.`, false, { label: "Bring it back", run: async () => {
+        try {
+          const r = await api("POST", "/api/queue", { action: "restore", items: prev, extras: d.previous.extras || [] });
+          S.queue = r.items; S.queueExtra = r.extras || []; renderLibrary(); renderStatus(); toast("Your old queue is back.");
+        } catch (e) { toast(e.message, true); }
+      } });
+    } else toast(text);
+  } catch (e) { toast(e.message, true); }
+}
+async function playlistAction(body) {
+  const d = await api("POST", "/api/playlists", body);
+  S.playlists = d.items; renderLibrary();
+  return d;
+}
+const plDlg = $("#plDlg");
+let plDlgDone = null;
+function askPlaylistName(title, value, button) {
+  return new Promise(resolve => {
+    $("#plDlgTitle").textContent = title; $("#plSave").textContent = button;
+    const taken = new Set(S.playlists.map(p => p.name.toLowerCase()));
+    let n = S.playlists.length + 1; while (taken.has(`playlist ${n}`)) n++;
+    $("#plName").value = value || ""; $("#plName").placeholder = `Playlist ${n}`;
+    plDlgDone = resolve; plDlg.showModal(); $("#plName").focus(); $("#plName").select();
+  });
+}
+$("#plForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = $("#plName").value.trim() || $("#plName").placeholder;
+  plDlg.close(); if (plDlgDone) { const f = plDlgDone; plDlgDone = null; f(name); }
+});
+$("#plCancel").addEventListener("click", () => plDlg.close());
+plDlg.addEventListener("close", () => { if (plDlgDone) { const f = plDlgDone; plDlgDone = null; f(null); } });
+async function newPlaylist(keys = [], open = true) {
+  const name = await askPlaylistName("New playlist", "", "Make playlist");
+  if (name === null) return null;
+  try {
+    const d = await playlistAction({ action: "create", name, keys });
+    if (keys.length) toast(`Made “${d.created.name}” with ${keys.length === 1 ? "this song" : `${keys.length} songs`}.`);
+    if (open) { S.tab = "playlists"; S.openPl = d.created.id; S.search = ""; $("#search").value = ""; renderLibrary(); if (!keys.length) openPick(); }
+    return d.created;
+  } catch (e) { toast(e.message, true); return null; }
+}
+async function addToPlaylist(pid, keys) {
+  try {
+    const d = await playlistAction({ action: "add", id: pid, keys });
+    const pl = d.items.find(p => p.id === pid);
+    toast(d.added ? `Added ${d.added === 1 ? "to" : `${d.added} songs to`} “${pl.name}”.` + (d.already ? ` ${d.already} ${d.already === 1 ? "was" : "were"} already in it.` : "")
+      : d.full ? `“${pl.name}” is full.` : `Already in “${pl.name}”.`);
+  } catch (e) { toast(e.message, true); }
+}
+async function renamePlaylist(pl) {
+  const name = await askPlaylistName("Rename playlist", pl.name, "Rename");
+  if (name === null || name === pl.name) return;
+  try { await playlistAction({ action: "rename", id: pl.id, name }); } catch (e) { toast(e.message, true); }
+}
+async function deletePlaylist(pl) {
+  try {
+    const d = await playlistAction({ action: "delete", id: pl.id });
+    if (S.openPl === pl.id) { S.openPl = null; renderLibrary(); }
+    toast(`Deleted “${pl.name}”.`, false, { label: "Undo", run: async () => {
+      try { await playlistAction({ action: "restore", playlist: d.deleted, index: d.index }); toast(`“${pl.name}” is back.`); }
+      catch (e) { toast(e.message, true); }
+    } });
+  } catch (e) { toast(e.message, true); }
+}
+$("#listBar").addEventListener("click", e => {
+  const play = e.target.closest("[data-play]");
+  if (play) { const keys = visibleKeys(); playList(keys, play.dataset.play, listLabel(keys.length)); return; }
+  const b = e.target.closest("[data-pl]"); if (!b) return;
+  const pl = openPlaylist();
+  if (b.dataset.pl === "new") newPlaylist();
+  else if (b.dataset.pl === "back") { S.openPl = null; renderLibrary(); const r = document.querySelector(`[data-open-pl]`); if (r) r.focus(); }
+  else if (b.dataset.pl === "add" && pl) openPick();
+  else if (b.dataset.pl === "menu" && pl) {
+    const r = b.getBoundingClientRect();
+    showMenu(r.left, r.bottom + 4, [
+      { title: pl.name },
+      { label: "Rename", run: () => renamePlaylist(pl) },
+      { label: "Delete playlist", run: () => deletePlaylist(pl) },
+    ], b);
+  }
+});
+
+// ---------- right-click menu ----------
+const ctxMenu = $("#ctxMenu");
+let ctxReturn = null;
+function showMenu(x, y, items, returnTo) {
+  ctxReturn = returnTo || document.activeElement;
+  ctxMenu.innerHTML = items.map((it, i) => it.sep ? `<div class="sep" role="separator"></div>`
+    : it.title ? `<div class="menu-title">${esc(it.title)}</div>`
+    : `<button role="menuitem" data-i="${i}"${it.disabled ? " disabled" : ""}>${esc(it.label)}</button>`).join("");
+  ctxMenu._items = items;
+  ctxMenu.hidden = false;
+  const w = ctxMenu.offsetWidth, h = ctxMenu.offsetHeight;
+  ctxMenu.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+  ctxMenu.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`;
+  const first = ctxMenu.querySelector("button:not(:disabled)"); if (first) first.focus();
+}
+function hideMenu(back = true) {
+  if (ctxMenu.hidden) return;
+  ctxMenu.hidden = true;
+  if (back && ctxReturn && document.contains(ctxReturn)) ctxReturn.focus();
+}
+ctxMenu.addEventListener("click", e => {
+  const b = e.target.closest("button[data-i]"); if (!b) return;
+  const it = ctxMenu._items[+b.dataset.i];
+  if (it.keep) { it.run(); return; }          // opens another menu in place
+  hideMenu(); it.run();
+});
+ctxMenu.addEventListener("keydown", e => {
+  const btns = [...ctxMenu.querySelectorAll("button:not(:disabled)")]; const i = btns.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const n = btns[(i + (e.key === "ArrowDown" ? 1 : btns.length - 1)) % btns.length]; if (n) n.focus(); }
+  else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideMenu(); }
+  else if (e.key === "Tab") hideMenu(false);
+});
+document.addEventListener("mousedown", e => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(false); }, true);
+window.addEventListener("blur", () => hideMenu(false));
+window.addEventListener("resize", () => hideMenu(false));
+$("#songs").addEventListener("scroll", () => hideMenu(false));
+function playlistMenu(keys, x, y, returnTo) {
+  const many = keys.length > 1;
+  const items = [{ title: many ? `Add ${keys.length} songs to` : "Add to playlist" }];
+  S.playlists.forEach(p => {
+    const has = !many && p.songs.includes(keys[0]);
+    items.push({ label: has ? `${p.name} (already in it)` : p.name, disabled: has, run: () => addToPlaylist(p.id, keys) });
+  });
+  if (S.playlists.length) items.push({ sep: true });
+  items.push({ label: "New playlist…", run: () => newPlaylist(keys, false) });
+  showMenu(x, y, items, returnTo);
+}
+function songMenu(key, x, y, row) {
+  const s = S.songs.find(t => t.key === key); if (!s || s.error) return;
+  const li = row.closest("li");
+  const plIndex = li && li.dataset.plIndex !== undefined && S.tab === "playlists" ? +li.dataset.plIndex : null;
+  const pl = plIndex !== null ? openPlaylist() : null;
+  const items = [
+    { title: s.title },
+    { label: "Play", run: () => playOne(key) },
+    { label: "Play next", run: () => queueAction("next", key) },
+    { label: "Add to queue", run: () => queueAction("add", key) },
+    { label: "Add to playlist…", keep: true, run: () => playlistMenu([key], x, y, row) },
+    { label: s.favorite ? "Remove from favorites" : "Add to favorites", run: () => setFavorite(key, !s.favorite) },
+  ];
+  if (pl) items.push({ sep: true }, { label: "Remove from this playlist", run: () => playlistAction({ action: "remove", id: pl.id, index: plIndex, key }).catch(e => toast(e.message, true)) });
+  showMenu(x, y, items, row);
+}
+async function playOne(key) {
+  if (key !== S.selected) await selectSong(key);
+  try { await api("POST", "/api/play", { key }); } catch (e) { toast(e.message, true); }
+}
+$("#songs").addEventListener("contextmenu", e => {
+  const b = e.target.closest(".song[data-key]"); if (!b) return;
+  e.preventDefault(); songMenu(b.dataset.key, e.clientX, e.clientY, b);
+});
+$("#songs").addEventListener("keydown", e => {
+  if (!(e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) return;
+  const b = e.target.closest(".song[data-key]"); if (!b) return;
+  e.preventDefault(); const r = b.getBoundingClientRect(); songMenu(b.dataset.key, r.left + 24, r.bottom - 6, b);
+});
+
+// ---------- pick songs for a playlist ----------
+const pickDlg = $("#pickDlg");
+let pickChosen = new Set();
+function openPick() {
+  const pl = openPlaylist(); if (!pl) return;
+  pickChosen = new Set(); $("#pickSearch").value = "";
+  $("#pickTitle").textContent = `Add songs to ${pl.name}`;
+  renderPick(); pickDlg.showModal(); $("#pickSearch").focus();
+}
+function renderPick() {
+  const pl = openPlaylist(); if (!pl) { pickDlg.close(); return; }
+  const inIt = new Set(pl.songs), q = $("#pickSearch").value.trim().toLowerCase();
+  const list = S.songs.filter(s => !s.error && (!q || s.title.toLowerCase().includes(q)))
+    .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+  $("#pickList").innerHTML = list.length ? list.map(s => {
+    const has = inIt.has(s.key);
+    return `<li class="${has ? "in" : ""}"><label><input type="checkbox" data-pick="${esc(s.key)}"${has || pickChosen.has(s.key) ? " checked" : ""}${has ? " disabled" : ""}>
+      <span class="t" title="${esc(s.title)}">${esc(s.title)}</span><span class="s">${has ? "Already in it" : fmt(s.duration)}</span></label></li>`;
+  }).join("") : `<li class="empty-lib"><p>No songs match “${esc($("#pickSearch").value)}”.</p></li>`;
+  const n = pickChosen.size;
+  $("#pickCount").textContent = n ? `${n} chosen` : "";
+  $("#pickAdd").disabled = !n; $("#pickAdd").textContent = n > 1 ? `Add ${n} songs` : n ? "Add 1 song" : "Add songs";
+}
+$("#pickList").addEventListener("change", e => {
+  const c = e.target.closest("[data-pick]"); if (!c) return;
+  if (c.checked) pickChosen.add(c.dataset.pick); else pickChosen.delete(c.dataset.pick);
+  const n = pickChosen.size;
+  $("#pickCount").textContent = n ? `${n} chosen` : "";
+  $("#pickAdd").disabled = !n; $("#pickAdd").textContent = n > 1 ? `Add ${n} songs` : n ? "Add 1 song" : "Add songs";
+});
+$("#pickSearch").addEventListener("input", renderPick);
+$("#pickAll").addEventListener("click", () => {
+  document.querySelectorAll("#pickList [data-pick]:not(:disabled)").forEach(c => pickChosen.add(c.dataset.pick));
+  renderPick();
+});
+$("#pickCancel").addEventListener("click", () => pickDlg.close());
+$("#pickAdd").addEventListener("click", async () => {
+  const pl = openPlaylist(); if (!pl || !pickChosen.size) return;
+  const keys = S.songs.filter(s => pickChosen.has(s.key)).map(s => s.key);
+  pickDlg.close(); await addToPlaylist(pl.id, keys);
+});
 
 async function setFavorite(key, on) {
   try {
@@ -858,7 +1225,14 @@ async function queueAction(action, key, index) {
 }
 document.querySelector(".tabbar").addEventListener("click", e => {
   const t = e.target.closest(".tab"); if (!t) return;
+  if (t.dataset.tab === "playlists" && S.tab === "playlists") S.openPl = null;     // a second click goes back to the list
   S.tab = t.dataset.tab; renderLibrary();
+});
+$("#queueBar").addEventListener("change", e => {
+  if (e.target.id !== "keepPlaying") return;
+  if (S.app) S.app.keep_playing = e.target.checked;
+  saveApp({ keep_playing: e.target.checked });
+  toast(e.target.checked ? "When the queue ends, Smart shuffle keeps the music going." : "Playback stops when the queue ends.");
 });
 $("#sortPick").addEventListener("change", e => { S.sort = e.target.value; store("sort", S.sort); renderLibrary(); });
 $("#queueBar").addEventListener("click", e => { const b = e.target.closest("[data-q]"); if (b) queueAction(b.dataset.q); });
@@ -870,6 +1244,17 @@ $("#songs").addEventListener("click", e => {
     else if (tool.dataset.queue) queueAction("add", tool.dataset.queue);
     else if (tool.dataset.qmove) queueAction("move", null, +tool.dataset.qmove);
     else if (tool.dataset.qremove) queueAction("remove", null, +tool.dataset.qremove);
+    else if (tool.dataset.plPlay) {
+      const pl = S.playlists.find(p => p.id === tool.dataset.plPlay);
+      const by = new Set(S.songs.filter(s => !s.error).map(s => s.key));
+      if (pl) { const keys = pl.songs.filter(k => by.has(k)); if (keys.length) playList(keys, "order", `${pl.name} (${keys.length === 1 ? "1 song" : `${keys.length} songs`})`); else toast(`“${pl.name}” is empty.`); }
+    }
+    else if (tool.dataset.plmove || tool.dataset.plremove) {
+      const pl = openPlaylist(); if (!pl) return;
+      const body = tool.dataset.plmove ? { action: "move", id: pl.id, index: +tool.dataset.plmove, to: +tool.dataset.plmove - 1 }
+        : { action: "remove", id: pl.id, index: +tool.dataset.plremove, key: tool.dataset.key };
+      playlistAction(body).catch(err => toast(err.message, true));
+    }
   }
 }, true);
 let lastMark = "";
@@ -878,12 +1263,16 @@ function markPlaying() {
   if (mark !== lastMark) { lastMark = mark; renderLibrary(); }
 }
 
-$("#songs").addEventListener("click", e => { const b = e.target.closest(".song"); if (b) selectSong(b.dataset.key); });
+$("#songs").addEventListener("click", e => {
+  const b = e.target.closest(".song"); if (!b) return;
+  if (b.dataset.openPl) { S.openPl = b.dataset.openPl; renderLibrary(); const f = $("#listBar [data-pl='back']"); if (f) f.focus(); return; }
+  if (b.dataset.key) selectSong(b.dataset.key);
+});
 $("#songs").addEventListener("keydown", e => {
   if (!["ArrowDown", "ArrowUp"].includes(e.key)) return;
-  const btns = [...document.querySelectorAll(".song")]; const i = btns.indexOf(document.activeElement);
+  const btns = [...document.querySelectorAll("#songs .song")]; const i = btns.indexOf(document.activeElement);
   const next = btns[i + (e.key === "ArrowDown" ? 1 : -1)];
-  if (next) { e.preventDefault(); next.focus(); selectSong(next.dataset.key); }
+  if (next) { e.preventDefault(); next.focus(); if (next.dataset.key) selectSong(next.dataset.key); }
 });
 $("#search").addEventListener("input", e => { S.search = e.target.value; renderLibrary(); });
 
@@ -1084,6 +1473,8 @@ function renderStatus() {
   if (S.queue.length) {
     const nx = S.songs.find(x => x.key === S.queue[0]);
     text += ` <span class="note" style="margin:0 0 0 6px">Up next: ${esc(nx ? nx.title : S.queue[0])}</span>`;
+  } else if (st.next_auto && ACTIVE.has(st.state)) {
+    text += ` <span class="note" style="margin:0 0 0 6px">Up next: a Smart shuffle pick</span>`;
   }
   el.dataset.tone = tone;
   el.innerHTML = `<span class="dot"></span><span>${text}</span>`;
@@ -1359,6 +1750,7 @@ function wireStage() {
     if (b.dataset.act === "fav") setFavorite(key, b.getAttribute("aria-pressed") !== "true");
     if (b.dataset.act === "queue") queueAction("add", key);
     if (b.dataset.act === "next") queueAction("next", key);
+    if (b.dataset.act === "playlist") { const r = b.getBoundingClientRect(); playlistMenu([key], r.left, r.bottom + 4, b); }
     if (b.dataset.act === "delete") askDelete(key);
   });
   new ResizeObserver(() => { buildLive(); drawLive(); }).observe($("#live"));
@@ -1568,6 +1960,7 @@ function renderSongActions() {
   box.innerHTML = `<button class="btn best" data-act="best" title="Pick the settings that suit this song. Speed and Play like stay yours."><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" fill="currentColor"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" fill="currentColor"/></svg>Best for this song</button>
     <button class="btn" data-act="fav" aria-pressed="${!!entry.favorite}">${entry.favorite ? "★ Favorite" : "☆ Favorite"}</button>
     <button class="btn" data-act="queue">Add to queue</button><button class="btn" data-act="next">Play next</button>
+    <button class="btn" data-act="playlist" aria-haspopup="menu">Add to playlist</button>
     <button class="btn del" data-act="delete" title="Delete this song. It goes to the Recycle Bin, so you can get it back."><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zM6 9h12l-1 11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" fill="currentColor"/></svg>Delete</button>`;
 }
 const HOTKEY_NAMES = { PAGEUP: "Page Up", PAGEDOWN: "Page Down", HOME: "Home", END: "End", INSERT: "Insert", DELETE: "Delete", PAUSE: "Pause", SCROLLLOCK: "Scroll Lock" };
@@ -1581,10 +1974,16 @@ function renderHotkeyHint() {
   if (h.stop) parts.push(`${keyName(h.stop)} stops`);
   el.textContent = parts.length ? `Inside Roblox, ${parts.join(" and ")}.` : "";
 }
-let animOn = false;
+let animOn = false, animFrame = 0;
 function startAnim() {
   if (animOn) return; animOn = true;
-  const tick = () => { drawMap(); if (S.status.state === "playing" || S.drag) requestAnimationFrame(tick); else { animOn = false; drawMap(); } };
+  // While you're in Roblox (this window isn't the active one), draw every other frame: 30 a second still
+  // looks smooth, and it leaves more of the PC to Roblox.
+  const tick = () => {
+    animFrame++;
+    if (document.hasFocus() || S.drag || animFrame % 2 === 0) drawMap();
+    if (S.status.state === "playing" || S.drag) requestAnimationFrame(tick); else { animOn = false; drawMap(); }
+  };
   requestAnimationFrame(tick);
 }
 
@@ -1757,7 +2156,8 @@ function renderDetails() {
     return /hand/i.test(t.name) || !hand ? esc(t.name) : `${esc(t.name)}, plays the ${esc(hand)}`;
   }).join("<br>");
   box.innerHTML = `<dl class="detail-grid"><dt>Tempo</dt><dd>${tempo}</dd><dt>Key</dt><dd>${esc(d.key || "Unclear")}</dd>
-    <dt>Tracks</dt><dd>${hands || "None"}</dd><dt>Notes</dt><dd>${m.notes.toLocaleString()}, ${m.pedals ? `${m.pedals} pedal events` : "no pedal events"}</dd></dl>
+    <dt>Tracks</dt><dd>${hands || "None"}</dd><dt>Notes</dt><dd>${m.notes.toLocaleString()}, ${m.pedals ? `${m.pedals} pedal events` : "no pedal events"}</dd>
+    <dt>Played</dt><dd>${(() => { const e = S.songs.find(x => x.key === m.key) || {}; return e.plays ? `${e.plays} ${e.plays === 1 ? "time" : "times"}` : "Not yet"; })()}</dd></dl>
     <div class="row"><button class="btn" id="copySheet">Copy as text sheet</button><button class="btn" id="saveSheet">Save text sheet</button>
     <span class="note" style="margin:0">Uses this song's transpose and tracks.</span></div>`;
   $("#copySheet").addEventListener("click", async () => {
@@ -1906,6 +2306,10 @@ async function loadAppSettings() {
 }
 function renderAppSettings() {
   const a = S.app;
+  $("#countdownPick").value = String(a.countdown ?? 3);
+  const pp = a.hotkeys && a.hotkeys.play_pause;
+  $("#countdownIntro").textContent = "After you press Play here and click into Roblox, PianoPilot counts down before the first note."
+    + (pp ? ` Pressing ${keyName(pp)} inside Roblox starts right away.` : "");
   document.querySelectorAll('input[name="pedal_method"]').forEach(r => { r.checked = r.value === a.pedal_method; });
   $("#shiftGap").value = a.shift_gap_ms; $("#shiftGapVal").textContent = a.shift_gap_ms ? `${a.shift_gap_ms} ms` : "None";
   $("#chordWin").value = a.chord_window_ms; $("#chordWinVal").textContent = `${a.chord_window_ms} ms`;
@@ -1995,6 +2399,7 @@ async function refreshSong() {
     S.song = d; Object.assign(S.song.settings, unsaved(key)); renderStage();
   } catch (e) { /* ignore */ }
 }
+$("#countdownPick").addEventListener("change", e => { S.app.countdown = +e.target.value; saveApp({ countdown: +e.target.value }); });
 $("#autoSetup").addEventListener("change", e => { S.app.auto_setup = e.target.checked; saveApp({ auto_setup: e.target.checked }); });
 $("#updateCheck").addEventListener("change", e => {
   S.app.update_check = e.target.checked; saveApp({ update_check: e.target.checked });
@@ -2033,6 +2438,8 @@ $("#chordWin").addEventListener("input", e => { S.app.chord_window_ms = +e.targe
 
 // ---------- "?" hints ----------
 const HINTS = {
+  smart: "Smart shuffle plays your favorites and songs you haven't heard in a while more often, and songs you skip less often. It never puts the same artist twice in a row. On a playlist or your favorites it also mixes in a few similar songs from your library, marked ✦.",
+  keep: "When the last song in the queue finishes, PianoPilot picks another one with Smart shuffle, so the music keeps going. It skips songs you heard in the last 2 hours.",
   speed: "How fast the song plays. 1× is the original speed.",
   playlike: "How human it sounds. Perfect is exact; Pro, Casual and Beginner add timing feel and a few mistakes.",
   pedal: "The sustain pedal lets notes ring on. From the song uses the file's own pedal; Auto adds one for you.",

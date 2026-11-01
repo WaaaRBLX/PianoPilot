@@ -92,7 +92,7 @@ function render() {
   $("#play").innerHTML = mode === "Pause" ? `<svg width="20" height="20" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>`
     : `<svg width="22" height="22" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>`;
   $("#play").setAttribute("aria-label", mode); $("#play").title = mode;
-  $("#stop").disabled = !here; $("#next").disabled = !queue.length;
+  $("#stop").disabled = !here; $("#next").disabled = !queue.length && !status.next_auto;
   $("#speed").textContent = `${(speeds[key] || 1).toFixed(2)}×`;
   if (key && speeds[key] === undefined) { speeds[key] = 1; loadSpeed(key); }
   draw();
@@ -104,10 +104,16 @@ function draw() {
   $("#fill").style.width = `${frac * 100}%`; $("#knob").style.left = `${frac * 100}%`;
   $("#tNow").textContent = fmt(p); $("#tTotal").textContent = fmt(total);
 }
-(function tick() { if (status.state === "playing") draw(); requestAnimationFrame(tick); })();
+// The bar moves 10 times a second while a song plays and rests otherwise (this window sits beside Roblox,
+// so it shouldn't take frames from it).
+let ticker = null;
+function keepTicking() {
+  if (status.state === "playing" && !ticker) ticker = setInterval(draw, 100);
+  else if (status.state !== "playing" && ticker) { clearInterval(ticker); ticker = null; }
+}
 const es = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
-es.addEventListener("hello", e => { const d = JSON.parse(e.data); status = d.status; statusAt = performance.now(); queue = d.queue || []; loadSongs(); });
-es.addEventListener("status", e => { status = JSON.parse(e.data); statusAt = performance.now(); render(); });
+es.addEventListener("hello", e => { const d = JSON.parse(e.data); status = d.status; statusAt = performance.now(); queue = d.queue || []; loadSongs(); keepTicking(); });
+es.addEventListener("status", e => { status = JSON.parse(e.data); statusAt = performance.now(); render(); keepTicking(); });
 es.addEventListener("queue", e => { queue = JSON.parse(e.data).items; render(); });
 es.addEventListener("library", () => loadSongs());
 es.addEventListener("song-settings", e => { const d = JSON.parse(e.data); speeds[d.key] = d.settings.speed; render(); });

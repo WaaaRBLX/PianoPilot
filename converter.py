@@ -13,6 +13,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -145,7 +146,7 @@ def write_midi(events, path, title):
     os.replace(tmp, path)
 
 
-def convert(model_dir, input_path, output_path, device, title=None):
+def convert(model_dir, input_path, output_path, device, title=None, gpu_batch=None):
     try:
         import threadpoolctl  # noqa: F401
     except Exception:
@@ -154,9 +155,33 @@ def convert(model_dir, input_path, output_path, device, title=None):
         sys.modules["threadpoolctl"] = stub
     from pianoscribe_engine import piano_engine, runtime_service
 
+    if gpu_batch:
+        runtime_service.GPU_BATCH_SIZE = max(1, min(32, int(gpu_batch)))
+    # Time the engine's audio analysis without changing its code: wrap the function it calls by name.
+    extract = piano_engine._extract_features
+
+    def timed_extract(*args, **kwargs):
+        t = time.perf_counter()
+        try:
+            return extract(*args, **kwargs)
+        finally:
+            runtime_service.add_time("features", time.perf_counter() - t)
+    piano_engine._extract_features = timed_extract
+
+    batch_used = [None]
+
+    def on_status(text):
+        found = re.search(r"GPU batch(?: reduced to)?:? (\d+)", str(text))
+        if found:
+            batch_used[0] = int(found.group(1))
+        if found and "reduced" in str(text):    # the graphics card couldn't take the bigger batch: PianoPilot remembers
+            emit("batch", size=batch_used[0])
+
     model_dir = Path(model_dir)
     emit("status", text="Reading audio")
+    t_read = time.perf_counter()
     audio = load_audio(input_path)
+    t_read = time.perf_counter() - t_read
     seconds = len(audio) / SAMPLE_RATE
     if seconds < 0.5:
         raise RuntimeError("This file has no audio, or it's too short to convert.")
@@ -176,7 +201,8 @@ def convert(model_dir, input_path, output_path, device, title=None):
                 audio, SAMPLE_RATE,
                 model_path_override=model_dir / "scorer.onnx",
                 device_override="gpu" if gpu else "cpu",
-                progress_callback=lambda done, total: emit("progress", done=done, total=total))
+                progress_callback=lambda done, total: emit("progress", done=done, total=total),
+                status_callback=on_status)
             break
         except Exception as exc:
             if gpu:
@@ -187,8 +213,14 @@ def convert(model_dir, input_path, output_path, device, title=None):
     if notes == 0:
         raise RuntimeError("No piano notes were found in this audio.")
     write_midi(events, output_path, title or Path(output_path).stem)
+    took = time.time() - started
+    t = runtime_service.TIMES
+    model = t.get("scorer", 0.0) + t.get("attributes", 0.0)
+    timing = {"read": t_read, "load": t.get("load", 0.0), "features": t.get("features", 0.0), "model": model,
+              "decode": max(0.0, took - t.get("load", 0.0) - t.get("features", 0.0) - model)}
     emit("done", notes=notes, pedals=len(events) - notes, seconds=round(seconds, 1),
-         took=round(time.time() - started, 1), device=used)
+         took=round(took, 1), device=used, batch=batch_used[0] if used == "Graphics card" else None,
+         timing={k: round(v, 2) for k, v in timing.items()})
 
 
 def main():
@@ -199,12 +231,13 @@ def main():
     ap.add_argument("--output")
     ap.add_argument("--device", default="auto", choices=["auto", "gpu", "cpu"])
     ap.add_argument("--title", default=None)
+    ap.add_argument("--gpu-batch", type=int, default=None)
     a = ap.parse_args()
     if a.check:
         check()
         return
     try:
-        convert(a.model, a.input, a.output, a.device, a.title)
+        convert(a.model, a.input, a.output, a.device, a.title, a.gpu_batch)
     except Exception as exc:
         text = str(exc) or exc.__class__.__name__
         emit("error", text=text)

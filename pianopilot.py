@@ -10,6 +10,7 @@ window. Closing the window closes the app.
 """
 import hashlib
 import json
+import math
 import os
 import queue
 import random
@@ -301,6 +302,15 @@ class Settings:
                 app["queue"] = [k for k in app["queue"] if k != key]
             if isinstance(app.get("played"), dict):
                 app["played"].pop(key, None)
+            for name in ("plays", "skips"):
+                if isinstance(app.get(name), dict):
+                    app[name].pop(key, None)
+            if isinstance(app.get("queue_extra"), list):
+                app["queue_extra"] = [k for k in app["queue_extra"] if k != key]
+            if isinstance(app.get("playlists"), list):
+                for pl in app["playlists"]:
+                    if isinstance(pl, dict) and isinstance(pl.get("songs"), list):
+                        pl["songs"] = [k for k in pl["songs"] if k != key]
             for name in ("last_song", "selected"):
                 if app.get(name) == key:
                     app.pop(name)
@@ -329,6 +339,17 @@ class Settings:
                 when = played.pop(old)
                 if new not in played:
                     played[new] = when
+            for name in ("plays", "skips"):
+                counts = app.get(name)
+                if isinstance(counts, dict) and old in counts:
+                    counts[new] = _count(counts.pop(old)) + _count(counts.get(new))
+            if isinstance(app.get("queue_extra"), list):
+                app["queue_extra"] = [new if k == old else k for k in app["queue_extra"]]
+            if isinstance(app.get("playlists"), list):
+                for pl in app["playlists"]:
+                    if isinstance(pl, dict) and isinstance(pl.get("songs"), list) and old in pl["songs"]:
+                        moved = [new if k == old else k for k in pl["songs"]]
+                        pl["songs"] = [k for i, k in enumerate(moved) if k not in moved[:i]]   # no doubles
             for name in ("last_song", "selected"):
                 if app.get(name) == old:
                     app[name] = new
@@ -338,6 +359,10 @@ class Settings:
             if isinstance(queue, list) and old in queue:
                 app["queue"] = [new if k == old else k for k in queue]
         self.save()
+
+
+def _count(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
 # ============================= LIBRARY ==============================
@@ -363,6 +388,8 @@ APP_DEFAULTS = {
     "has_88": None,              # does this piano play the 88-key extras? (answered in the calibration test)
     "auto_setup": True,          # give newly added songs the "Best for this song" settings
     "update_check": True,        # once a day, ask GitHub whether a newer version is out
+    "keep_playing": False,       # when the queue runs out, carry on with Smart shuffle from the library
+    "countdown": 3,              # seconds between clicking into Roblox and the first note (Play in this window)
 }
 
 
@@ -444,6 +471,8 @@ def clean_app_settings(raw):
             "has_88": raw.get("has_88") if isinstance(raw.get("has_88"), bool) else None,
             "auto_setup": raw.get("auto_setup", True) is not False,
             "update_check": raw.get("update_check", True) is not False,
+            "keep_playing": raw.get("keep_playing") is True,
+            "countdown": _int(raw.get("countdown", 3), 3, 0, 5),
             **clean_layout(raw.get("layout", ""), raw.get("layout_lowest", 36))}
 
 
@@ -696,9 +725,24 @@ class SongQueue:
         q = self.settings.app("queue", [])
         return [k for k in q if isinstance(k, str)] if isinstance(q, list) else []
 
-    def _save(self, items):
-        self.settings.set_app("queue", items[:200])
-        EVENTS.send("queue", {"items": items[:200]})
+    def extras(self):
+        """Songs Smart shuffle mixed in (shown with a mark in the queue)."""
+        x = self.settings.app("queue_extra", [])
+        return [k for k in x if isinstance(k, str)] if isinstance(x, list) else []
+
+    def _save(self, items, extras=None):
+        items = items[:QUEUE_LIMIT]
+        extras = [k for k in (self.extras() if extras is None else extras) if k in items]
+        self.settings.set_app("queue", items)
+        self.settings.set_app("queue_extra", extras)
+        EVENTS.send("queue", {"items": items, "extras": extras})
+
+    def replace(self, items, extras=()):
+        """Put a whole new list in the queue. Returns what was there before (for Undo)."""
+        with self.lock:
+            before = {"items": self.items(), "extras": self.extras()}
+            self._save(list(items), list(extras))
+            return before
 
     def change(self, action, key=None, index=None, all_keys=()):
         with self.lock:
@@ -733,12 +777,281 @@ class SongQueue:
             return None
 
 
+QUEUE_LIMIT = 500
+PLAYLIST_LIMIT = 200               # playlists
+PLAYLIST_SONGS = 2000              # songs in one playlist
+
+
+class Playlists:
+    """Named song lists, saved with the settings. Songs are file keys, like everywhere else."""
+
+    def __init__(self, settings):
+        self.settings = settings
+        self.lock = threading.Lock()
+
+    def items(self):
+        raw = self.settings.app("playlists", [])
+        out, ids = [], set()
+        for pl in raw if isinstance(raw, list) else []:
+            if not isinstance(pl, dict) or not isinstance(pl.get("id"), str) or pl["id"] in ids:
+                continue
+            ids.add(pl["id"])
+            songs = [k for k in pl.get("songs", []) if isinstance(k, str)] if isinstance(pl.get("songs"), list) else []
+            out.append({"id": pl["id"], "name": clean_playlist_name(pl.get("name")),
+                        "songs": list(dict.fromkeys(songs))[:PLAYLIST_SONGS],
+                        "created": pl.get("created") if isinstance(pl.get("created"), (int, float)) else 0})
+        return out[:PLAYLIST_LIMIT]
+
+    def get(self, pid):
+        for pl in self.items():
+            if pl["id"] == pid:
+                return pl
+        raise ApiError(404, "That playlist doesn't exist anymore.")
+
+    def _save(self, items):
+        self.settings.set_app("playlists", items)
+        EVENTS.send("playlists", {"items": items})
+
+    def change(self, body, exists):
+        """One edit. Returns {"items": all playlists, ...} plus what the edit made or removed."""
+        action = body.get("action")
+        with self.lock:
+            items = self.items()
+            out = {}
+            if action == "create":
+                if len(items) >= PLAYLIST_LIMIT:
+                    raise ApiError(400, f"You can have up to {PLAYLIST_LIMIT} playlists.")
+                keys = [k for k in dict.fromkeys(_keys(body.get("keys"))) if exists(k)][:PLAYLIST_SONGS]
+                taken = {pl["name"].lower() for pl in items}
+                name = clean_playlist_name(body.get("name"), "")
+                if not name:
+                    n = len(items) + 1
+                    while f"playlist {n}" in taken:
+                        n += 1
+                    name = f"Playlist {n}"
+                pl = {"id": secrets.token_hex(4), "name": name, "songs": keys, "created": int(time.time())}
+                items.append(pl)
+                out["created"] = pl
+            elif action == "restore":                   # Undo for a delete
+                pl = body.get("playlist")
+                if not isinstance(pl, dict) or not isinstance(pl.get("id"), str):
+                    raise ApiError(400, "Nothing to put back.")
+                if not any(x["id"] == pl["id"] for x in items):
+                    index = body.get("index")
+                    index = int(index) if isinstance(index, (int, float)) else len(items)
+                    items.insert(max(0, min(len(items), index)), {
+                        "id": pl["id"][:16], "name": clean_playlist_name(pl.get("name")),
+                        "songs": [k for k in dict.fromkeys(_keys(pl.get("songs"))) if exists(k)][:PLAYLIST_SONGS],
+                        "created": pl.get("created") if isinstance(pl.get("created"), (int, float)) else 0})
+            else:
+                pid = body.get("id")
+                index = next((i for i, x in enumerate(items) if x["id"] == pid), None)
+                if index is None:
+                    raise ApiError(404, "That playlist doesn't exist anymore.")
+                pl = items[index]
+                if action == "rename":
+                    name = clean_playlist_name(body.get("name"), "")
+                    if not name:
+                        raise ApiError(400, "Give the playlist a name.")
+                    pl["name"] = name
+                elif action == "delete":
+                    items.pop(index)
+                    out.update(deleted=pl, index=index)
+                elif action == "add":
+                    keys = [k for k in dict.fromkeys(_keys(body.get("keys"))) if exists(k)]
+                    new = [k for k in keys if k not in pl["songs"]]
+                    room = PLAYLIST_SONGS - len(pl["songs"])
+                    pl["songs"] += new[:max(0, room)]
+                    out.update(added=min(len(new), max(0, room)), already=len(keys) - len(new),
+                               full=len(new) > room)
+                elif action == "remove":
+                    at = body.get("index")
+                    key = body.get("key")
+                    if isinstance(at, int) and 0 <= at < len(pl["songs"]) and (key is None or pl["songs"][at] == key):
+                        pl["songs"].pop(at)
+                    elif isinstance(key, str) and key in pl["songs"]:
+                        pl["songs"].remove(key)
+                elif action == "move":
+                    at, to = body.get("index"), body.get("to")
+                    if isinstance(at, int) and isinstance(to, int) and 0 <= at < len(pl["songs"]):
+                        to = max(0, min(len(pl["songs"]) - 1, to))
+                        pl["songs"].insert(to, pl["songs"].pop(at))
+                else:
+                    raise ApiError(400, "Unknown playlist action.")
+            self._save(items)
+            out["items"] = items
+            return out
+
+
+def _keys(raw):
+    return [k for k in raw if isinstance(k, str)][:5000] if isinstance(raw, list) else []
+
+
+def clean_playlist_name(raw, fallback="Playlist"):
+    name = " ".join(str(raw or "").split())[:60]
+    return "".join(c for c in name if c.isprintable()) or fallback
+
+
+# ------------------------- shuffle and smart shuffle -------------------------
+
+def artist_of(title):
+    """'Artist - Song' -> 'artist' (most song files are named like that); '' when there's no dash."""
+    parts = [p.strip() for p in str(title).split(" - ")]
+    return parts[0].lower() if len(parts) >= 2 and parts[0] else ""
+
+
+def smart_weight(key, ctx):
+    """How likely Smart shuffle is to pick this song early: favorites and songs you haven't heard in a while
+    come up more, songs you just played or usually skip come up less."""
+    w = 2.0 if key in ctx["favorites"] else 1.0
+    last = ctx["played"].get(key)
+    if not isinstance(last, (int, float)) or last <= 0:
+        w *= 1.3                                    # never played here yet
+    else:
+        hours = (ctx["now"] - last) / 3600
+        w *= 0.08 if hours < 2 else 0.5 if hours < 24 else 0.85 if hours < 24 * 7 else 1.15
+    w *= 1 + min(_count(ctx["plays"].get(key)), 20) / 40     # played a lot: you like it
+    w *= max(0.25, 0.7 ** _count(ctx["skips"].get(key)))
+    return w
+
+
+def smart_context(settings, now=None):
+    def table(name):
+        raw = settings.app(name, {})
+        return raw if isinstance(raw, dict) else {}
+    favorites = settings.app("favorites", [])
+    return {"favorites": set(favorites) if isinstance(favorites, list) else set(), "played": table("played"),
+            "plays": table("plays"), "skips": table("skips"), "now": time.time() if now is None else now}
+
+
+def spread_artists(order, artist):
+    """Reorder as little as possible so the same artist never plays twice in a row, whenever that can be
+    avoided. Keeps the given order otherwise (it's already the weighted shuffle)."""
+    remaining = list(order)
+    names = {k: artist(k) for k in remaining}
+    left = {}
+    for k in remaining:
+        if names[k]:
+            left[names[k]] = left.get(names[k], 0) + 1
+    out, last = [], None
+    while remaining:
+        n = len(remaining)
+        top = max(left, key=left.get) if left else None
+        pick = None
+        if top and top != last and left[top] > n // 2:
+            pick = next(k for k in remaining if names[k] == top)   # it must go now, or it can't be spread out
+        else:
+            pick = next((k for k in remaining if not names[k] or names[k] != last), remaining[0])
+        remaining.remove(pick)
+        if names[pick]:
+            left[names[pick]] -= 1
+            if not left[names[pick]]:
+                del left[names[pick]]
+        last = names[pick] or None
+        out.append(pick)
+    return out
+
+
+def smart_order(keys, meta, ctx, rng=random):
+    """Weighted random order (each song's chance comes from smart_weight), artists spread out."""
+    keyed = []
+    for k in keys:
+        w = max(1e-6, smart_weight(k, ctx))
+        keyed.append((rng.random() ** (1.0 / w), k))           # Efraimidis-Spirakis weighted sampling
+    order = [k for _r, k in sorted(keyed, reverse=True)]
+    return spread_artists(order, lambda k: artist_of(meta.get(k, {}).get("title", "")))
+
+
+def smart_extras(chosen, pool, meta, ctx, rng=random):
+    """Songs from the rest of the library that suit a playlist (same artists, similar speed and length),
+    for Smart shuffle to mix in: about one for every four songs, at most 10."""
+    chosen_set = set(chosen)
+    others = [k for k in pool if k not in chosen_set]
+    want = min(10, max(1, len(chosen) // 4)) if len(chosen) >= 3 else 0
+    if not others or not want:
+        return []
+    def median(values):
+        values = sorted(v for v in values if isinstance(v, (int, float)))
+        return values[len(values) // 2] if values else None
+    nps = median(meta.get(k, {}).get("nps") for k in chosen)
+    length = median(meta.get(k, {}).get("duration") for k in chosen)
+    artists = {artist_of(meta.get(k, {}).get("title", "")) for k in chosen} - {""}
+    levels = {meta.get(k, {}).get("difficulty") for k in chosen}
+    scored = []
+    for k in others:
+        m = meta.get(k, {})
+        score = 0.0
+        if artist_of(m.get("title", "")) in artists:
+            score += 3
+        if m.get("difficulty") in levels:
+            score += 1
+        if nps and isinstance(m.get("nps"), (int, float)) and abs(m["nps"] - nps) <= 0.3 * nps:
+            score += 1
+        if length and isinstance(m.get("duration"), (int, float)) and abs(m["duration"] - length) <= 0.4 * length:
+            score += 0.5
+        if score > 0:
+            # Most alike first; a little chance decides between close ones, and favorites or songs you
+            # haven't heard in a while win those (one heard minutes ago drops back).
+            scored.append((score + 0.8 * rng.random() + 0.4 * math.log(max(0.05, smart_weight(k, ctx))), k))
+    return [k for _r, k in sorted(scored, reverse=True)[:want]]
+
+
+def mix_in(order, extras):
+    """Put the extra songs in evenly, never first."""
+    if not extras:
+        return list(order)
+    out, step = list(order), max(2, (len(order) + len(extras)) // (len(extras) + 1))
+    for n, k in enumerate(extras):
+        out.insert(min(len(out), step * (n + 1) + n), k)
+    return out
+
+
+def build_play_order(keys, mode, library, settings, whole=False, rng=random):
+    """The order to play `keys` in: as listed ("order"), shuffled, or Smart shuffle (which may mix in similar
+    songs from the rest of the library unless `whole` is the whole library). Returns (order, extras)."""
+    listing = {m["key"]: m for m in library.listing()["songs"] if not m.get("error")}
+    keys = [k for k in dict.fromkeys(keys) if k in listing]
+    if mode == "shuffle":
+        keys = list(keys)
+        rng.shuffle(keys)
+        return keys, []
+    if mode != "smart":
+        return keys, []
+    ctx = smart_context(settings)
+    order = smart_order(keys, listing, ctx, rng)
+    extras = [] if whole else smart_extras(keys, list(listing), listing, ctx, rng)
+    return mix_in(order, extras), extras
+
+
+def smart_next(library, settings, exclude=(), after=None, rng=random):
+    """One song for Keep playing: a Smart shuffle pick from the whole library, skipping what just played,
+    and not by the same artist as `after` (the song that just played) when there's a choice."""
+    listing = {m["key"]: m for m in library.listing()["songs"] if not m.get("error")}
+    exclude = set(exclude)
+    pool = [k for k in listing if k not in exclude] or [k for k in listing if k != after] or list(listing)
+    if not pool:
+        return None
+    last = artist_of(listing.get(after, {}).get("title", "")) if after else ""
+    other = [k for k in pool if not last or artist_of(listing[k]["title"]) != last] or pool
+    ctx = smart_context(settings)
+    return max(other, key=lambda k: rng.random() ** (1.0 / max(1e-6, smart_weight(k, ctx))))
+
+
+NOT_LOADED = "not loaded"      # a song whose notes aren't in memory: Library.get reads them when needed
+KEEP_LOADED = 40               # songs whose notes stay in memory (the most recently used ones)
+INDEX_FORMAT = 1               # bump when the saved song info changes shape
+
+
 class Library:
-    def __init__(self, folder, settings):
+    def __init__(self, folder, settings, index_path=None):
         self.folder = folder
         self.settings = settings
         self.lock = threading.RLock()      # re-entrant: new songs are set up while the lock is held
-        self.cache = {}            # key -> (mtime, size, song or None, meta)
+        self.cache = {}            # key -> (mtime, size, song / NOT_LOADED / None if unreadable, meta)
+        self.loaded = {}           # keys whose notes are in memory, oldest use first (dicts keep order)
+        self.index_path = index_path
+        self.index = self._load_index()     # song info saved last time, so starting up needn't read every file
+        self.index_sig = None
         self.sig = ""
         self.scanned = False       # the first scan of this session
         self.on_new = None         # called with the keys of newly added songs
@@ -747,6 +1060,48 @@ class Library:
         self.recent_gone = {}      # song that vanished -> (mtime, size, scan) for a few scans, to catch moves
         self.scan_no = 0
         self.failed = {}           # new song -> how many times setting it up failed
+
+    # ---- saved song info (length, difficulty, tracks...) ----
+    def _load_index(self):
+        if not self.index_path:
+            return {}
+        try:
+            raw = json.loads(Path(self.index_path).read_text(encoding="utf-8"))
+            if raw.get("format") != INDEX_FORMAT or raw.get("version") != VERSION:   # made by another version
+                return {}
+            songs = raw.get("songs")
+            return {k: v for k, v in songs.items() if isinstance(v, list) and len(v) == 3 and isinstance(v[2], dict)
+                    and v[2].get("key") == k} if isinstance(songs, dict) else {}
+        except (OSError, ValueError, AttributeError):
+            return {}
+
+    def _save_index(self):
+        if not self.index_path or self.index_sig == self.sig:
+            return
+        data = {"format": INDEX_FORMAT, "version": VERSION,
+                "songs": {k: [e[0], e[1], e[3]] for k, e in self.cache.items()}}
+        tmp = Path(str(self.index_path) + ".tmp")
+        try:
+            tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, self.index_path)
+            self.index_sig = self.sig
+        except OSError:
+            traceback.print_exc()
+
+    def _touch(self, key):
+        """Mark a song's notes as just used."""
+        self.loaded.pop(key, None)
+        self.loaded[key] = True
+        self._trim()
+
+    def _trim(self):
+        """Let the notes of the least recently used songs go when too many are in memory."""
+        while len(self.loaded) > KEEP_LOADED:
+            old = next(iter(self.loaded))
+            del self.loaded[old]
+            e = self.cache.get(old)
+            if e and e[2] is not None and e[2] is not NOT_LOADED:
+                self.cache[old] = (e[0], e[1], NOT_LOADED, e[3])
 
     def _files(self):
         found = []
@@ -761,17 +1116,27 @@ class Library:
             found.append(path)
         return found
 
+    @staticmethod
+    def _added(path):
+        """When the file was made (Windows keeps that; elsewhere the last change will do)."""
+        try:
+            st = path.stat()
+        except OSError:
+            return 0
+        born = getattr(st, "st_birthtime", None) or (st.st_ctime if IS_WINDOWS else st.st_mtime)
+        return int(born or 0)
+
     def _meta(self, key, path, song, error=None):
         title = path.stem
         if error:
-            return {"key": key, "title": title, "error": error}
+            return {"key": key, "title": title, "error": error, "added": self._added(path)}
         stats = pp.song_stats(song)
         tracks = [{"number": t.number, "name": t.name, "notes": t.notes,
                    "low": pp.note_name(t.low), "high": pp.note_name(t.high),
                    "drums": t.channels == {9}} for t in song.tracks if t.notes]
         return {"key": key, "title": title, "duration": round(stats["duration"], 2),
                 "notes": stats["notes"], "nps": stats["nps"], "difficulty": stats["difficulty"],
-                "tracks": tracks, "pedals": len(song.pedal),
+                "tracks": tracks, "pedals": len(song.pedal), "added": self._added(path),
                 "folder": str(path.parent.relative_to(self.folder)).replace("\\", "/").strip(".")}
 
     def _known_from_settings(self):
@@ -866,12 +1231,23 @@ class Library:
                 if old and old[0] == st.st_mtime and old[1] == st.st_size:
                     seen[key] = old
                     continue
+                saved = self.index.get(key)
+                if saved and saved[0] == st.st_mtime and saved[1] == st.st_size:
+                    meta = saved[2]                 # the same file as last time: its notes load when needed
+                    seen[key] = (st.st_mtime, st.st_size, None if meta.get("error") else NOT_LOADED, meta)
+                    continue
                 try:
                     song = pp.load_midi(str(path))
                     meta = self._meta(key, path, song)
                 except Exception as exc:
                     song, meta = None, self._meta(key, path, None, error=f"Couldn't read this MIDI file ({exc})")
                 seen[key] = (st.st_mtime, st.st_size, song, meta)
+            self.index = {}                         # only needed for the first scan
+            for k in [k for k in self.loaded if k not in seen]:
+                del self.loaded[k]
+            for k, e in seen.items():
+                if e[2] is not None and e[2] is not NOT_LOADED and k not in self.loaded:
+                    self.loaded[k] = True
             ready = self._new_songs(seen, set(written))
             self.cache = seen
             self.scanned = True
@@ -880,6 +1256,8 @@ class Library:
                 digest.update(f"{key}|{seen[key][0]}|{seen[key][1]}\n".encode("utf-8"))
             changed = digest.hexdigest() != self.sig
             self.sig = digest.hexdigest()
+            self._save_index()
+            self._trim()
             # Set new songs up before anyone else can look at them: another refresh (the folder watcher, or
             # the request that added the song) waits here until the settings are saved.
             done, broke = set(ready), False
@@ -913,9 +1291,12 @@ class Library:
             items = [dict(entry[3]) for entry in self.cache.values()]
         favorites = set(self.settings.app("favorites", []) or [])
         played = self.settings.app("played", {}) or {}
+        plays = self.settings.app("plays", {})
+        plays = plays if isinstance(plays, dict) else {}
         for item in items:
             item["favorite"] = item["key"] in favorites
             item["played"] = played.get(item["key"], 0)
+            item["plays"] = _count(plays.get(item["key"]))
         items.sort(key=lambda m: m["title"].lower())
         return {"sig": self.sig, "songs": items}
 
@@ -927,9 +1308,30 @@ class Library:
     def get(self, key):
         with self.lock:
             entry = self.cache.get(key)
+            if entry and entry[2] is not None and entry[2] is not NOT_LOADED:
+                self._touch(key)
+                return entry[2], entry[3]
         if not entry or entry[2] is None:
             raise ApiError(404, "That song isn't in the Songs folder anymore.")
-        return entry[2], entry[3]
+        # Read its notes now (outside the lock: a long song mustn't hold up the rest of the app).
+        path = self.folder / key
+        try:
+            song = pp.load_midi(str(path))
+        except Exception as exc:
+            with self.lock:
+                if self.cache.get(key) is entry:
+                    self.cache[key] = (entry[0], entry[1], None,
+                                       self._meta(key, path, None, error=f"Couldn't read this MIDI file ({exc})"))
+            raise ApiError(404, f"Couldn't read this song's file ({exc}).")
+        with self.lock:
+            now = self.cache.get(key)
+            if now and now[0] == entry[0] and now[1] == entry[1]:
+                if now[2] is NOT_LOADED:
+                    self.cache[key] = (now[0], now[1], song, now[3])
+                elif now[2] is not None:
+                    song = now[2]                   # another request read it meanwhile: use the same one
+                self._touch(key)
+            return song, entry[3]
 
     def path_for(self, key):
         path = (self.folder / key).resolve()
@@ -996,6 +1398,35 @@ class Playback:
         self.plan = None
         self.last_seeds = {}       # song -> seed of its most recent take
         self.status = {"state": "idle", "pos": 0.0, "total": 0.0, "key": None}
+        self.counted = True        # this play has been added to the song's play count
+
+    def keep_playing(self):
+        raw = self.library.settings.app("player")
+        return isinstance(raw, dict) and raw.get("keep_playing") is True
+
+    def _bump_count(self, name, key, by=1):
+        settings = self.library.settings
+        counts = settings.app(name, {})
+        counts = dict(counts) if isinstance(counts, dict) else {}
+        value = max(0, _count(counts.get(key)) + by)
+        if value:
+            counts[key] = value
+        else:
+            counts.pop(key, None)
+        if len(counts) > 5000:                      # forget the least-played songs first
+            counts = dict(sorted(counts.items(), key=lambda kv: _count(kv[1]))[-5000:])
+        settings.set_app(name, counts)
+
+    def _count_play(self, key, finished):
+        """A song counts as played once half of it has played (or it reached the end)."""
+        self.counted = True
+        try:
+            self._bump_count("plays", key)
+            if finished:
+                self._bump_count("skips", key, -1)   # listened all the way: forgive one skip
+            EVENTS.send("plays", {"key": key, "plays": _count(self.library.settings.app("plays", {}).get(key))})
+        except Exception:
+            traceback.print_exc()
 
     def _publisher(self, player, key):
         def publish(info):
@@ -1009,13 +1440,28 @@ class Playback:
             if info.get("state") == "finished" and self.plan is not None and self.plan.report.get("human"):
                 status["mistakes"] = self.plan.report["human"].get("mistakes", 0)
             upcoming = self.queue.items()
+            keep = key != "__test__" and self.keep_playing()
             if upcoming:
                 status["next"] = upcoming[0]
+            elif keep:
+                status["next_auto"] = True              # Keep playing picks one with Smart shuffle
+            finished = info.get("state") == "finished"
+            total = info.get("total") or 0
+            if not self.counted and key != "__test__" and (finished or total > 0 and info.get("pos", 0) >= total / 2):
+                self._count_play(key, finished)
             self.status = status
             EVENTS.send("status", status)
-            if info.get("state") == "finished" and upcoming and key != "__test__":
+            if finished and (upcoming or keep) and key != "__test__":
                 threading.Thread(target=self._advance, args=(player,), daemon=True).start()
         return publish
+
+    def _keep_playing_pick(self, current):
+        """The next song for Keep playing: Smart shuffle over the library, not one heard in the last 2 hours
+        (unless that's all there is)."""
+        played = self.library.settings.app("played", {})
+        recent = {k for k, t in (played.items() if isinstance(played, dict) else [])
+                  if isinstance(t, (int, float)) and time.time() - t < 2 * 3600}
+        return smart_next(self.library, self.library.settings, exclude=recent | {current}, after=current)
 
     def _advance(self, finished_player):
         """Play the next song in the queue a moment after one finishes."""
@@ -1024,6 +1470,8 @@ class Playback:
             if self.player is not finished_player:     # something else started meanwhile
                 return
             nxt = self.queue.pop_next(self.library.exists)
+            if not nxt and self.keep_playing():
+                nxt = self._keep_playing_pick(self.key)
             if nxt:
                 try:
                     self.play(nxt, countdown=0)
@@ -1050,7 +1498,7 @@ class Playback:
                 keyboard = pp.WindowsKeyboard(hotkeys={})     # hotkeys are handled by HotkeyWatcher
             keyboard.on_blocked = self._blocked
             player = pp.Player(keyboard, show_progress=False,
-                               countdown=pp.COUNTDOWN_SECONDS if countdown is None else countdown,
+                               countdown=app["countdown"] if countdown is None else countdown,
                                shift_gap_ms=app["shift_gap_ms"],
                                pedal_style="tap" if app["pedal_method"] == "tap" else "hold")
             player.on_status = self._publisher(player, key)
@@ -1059,6 +1507,7 @@ class Playback:
             self.speed, self.cfg, self.app_cfg, self.seed, self.plan = cfg["speed"], cfg, app, seed, plan
             self.last_seeds[key] = seed
             self.player = player
+            self.counted = key == "__test__"
             start_plan_time = max(0.0, float(start_at)) / cfg["speed"]
 
             def run():
@@ -1142,12 +1591,23 @@ class Playback:
                 self.player.request_seek(max(0.0, float(seconds)) / self.speed)
         return {"ok": True}
 
-    def next(self):
+    def next(self, countdown=None):
         with self.lock:
+            active = self.active()
+            current = self.key if active and self.key != "__test__" else None
             nxt = self.queue.pop_next(self.library.exists)
+            if not nxt and self.keep_playing():
+                nxt = self._keep_playing_pick(current)
             if not nxt:
                 raise ApiError(400, "The queue is empty. Add songs to it first.")
-            return self.play(nxt, countdown=0 if self.active() else None)
+            if current and not self.counted:
+                total, pos = self.status.get("total") or 0, self.status.get("pos") or 0
+                if total and pos < 0.3 * total:
+                    try:
+                        self._bump_count("skips", current)     # skipped early: Smart shuffle plays it less
+                    except Exception:
+                        traceback.print_exc()
+            return self.play(nxt, countdown=0 if active else countdown)
 
     def settings_changed(self, key):
         """Apply new song settings to the song that's playing, without restarting."""
@@ -1168,8 +1628,10 @@ class Playback:
             self.player.request_replace(plan, position_seconds / cfg["speed"], loop=loop_window(cfg, plan))
 
     # ---- hotkeys ----
-    def hotkey(self, action, chosen=None):
-        """chosen: the song picked in the window that sent the hotkey (it knows best what's picked)."""
+    def hotkey(self, action, chosen=None, in_roblox=False):
+        """chosen: the song picked in the window that sent the hotkey (it knows best what's picked).
+        in_roblox: pressed while Roblox was in front, so there's no need to wait for you to click into it."""
+        start = 0 if in_roblox else None
         settings = self.library.settings
         with self.lock:
             active = self.active()
@@ -1184,14 +1646,14 @@ class Playback:
                     elif active:
                         self.pause()
                     elif key and self.library.exists(key):
-                        self.play(key)
+                        self.play(key, countdown=start)
                 elif action == "stop":
                     self.stop()
                 elif action == "restart":
                     if active:
                         self.seek(0.0)
                     elif key and self.library.exists(key):
-                        self.play(key)
+                        self.play(key, countdown=start)
                 elif action in ("slower", "faster") and key and self.library.exists(key):
                     step = 0.05 if action == "faster" else -0.05
 
@@ -1206,7 +1668,7 @@ class Playback:
                     EVENTS.send("song-settings", {"key": key, "settings": cfg, "rev": rev})
                     EVENTS.send("notice", {"text": f"Speed {cfg['speed']:.2f}x"})
                 elif action == "next":
-                    self.next()
+                    self.next(countdown=start)
             except ApiError as exc:
                 EVENTS.send("notice", {"text": exc.message, "bad": True})
 
@@ -1242,7 +1704,7 @@ class HotkeyWatcher:
                 pressed = kb.poll_hotkeys()
                 if pressed and kb.foreground() == "roblox":
                     for action in pressed:
-                        self.playback.hotkey(action)
+                        self.playback.hotkey(action, in_roblox=True)
             except Exception:
                 traceback.print_exc()
                 time.sleep(1)
@@ -1605,6 +2067,10 @@ class AudioImport:
                         pass
                     self._publish_jobs()
 
+    def gpu_batch(self):
+        saved = self.settings.app("gpu_batch", 8)
+        return saved if isinstance(saved, int) and not isinstance(saved, bool) and 1 <= saved <= 32 else 8
+
     def _convert(self, job):
         if not model_ready() or not self.check_deps().get("ok"):
             with self.lock:
@@ -1615,6 +2081,7 @@ class AudioImport:
         cmd = python_command(self.settings) + [str(APP_DIR / "converter.py"), "--model", str(MODEL_DIR),
                                                "--input", job["input"], "--output", str(part),
                                                "--device", self.settings.app("convert_device", "auto"),
+                                               f"--gpu-batch={self.gpu_batch()}",
                                                f"--title={job['title']}"]     # "=" so a title like "-Intro" works
         # stderr goes into the same pipe, so a chatty library can never fill an unread pipe and freeze it
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
@@ -1640,6 +2107,9 @@ class AudioImport:
                         job["text"] = str(msg.get("text", ""))
                     elif msg["type"] == "done":
                         result = msg
+                    elif msg["type"] == "batch" and isinstance(msg.get("size"), int):
+                        # this graphics card needs smaller batches: start there next time instead of failing first
+                        self.settings.set_app("gpu_batch", max(1, min(self.gpu_batch(), msg["size"])))
                     elif msg["type"] == "error":
                         error = str(msg.get("text", ""))
                 self._publish_jobs()
@@ -1666,6 +2136,10 @@ class AudioImport:
         shutil.move(str(part), str(output))
         key = output.relative_to(SONGS_DIR).as_posix()
         with self.lock:
+            timing = result.get("timing") if isinstance(result.get("timing"), dict) else {}
+            log(f"Converted {job['title']}: {result.get('seconds')} s of audio in {result.get('took')} s on the "
+                f"{str(result.get('device', '?')).lower()}" + (f" (batch {result['batch']})" if result.get("batch") else "")
+                + "; " + ", ".join(f"{k} {v} s" for k, v in timing.items() if isinstance(v, (int, float))))
             job.update(state="done", song=key, notes=result.get("notes"), device=result.get("device"),
                        took=result.get("took"), text=f"{result.get('notes')} notes found")
         self.library.refresh(written={key})
@@ -1810,10 +2284,11 @@ class App:
         for folder in (SONGS_DIR, DATA_DIR):
             folder.mkdir(parents=True, exist_ok=True)
         self.settings = Settings(SETTINGS_FILE)
-        self.library = Library(SONGS_DIR, self.settings)
+        self.library = Library(SONGS_DIR, self.settings, DATA_DIR / "library.json")
         self.library.on_new = self.set_up_new_songs
         self.library.refresh()                 # also sets up songs that were added while PianoPilot was closed
         self.queue = SongQueue(self.settings)
+        self.playlists = Playlists(self.settings)
         self.playback = Playback(self.library, self.queue)
         self.hotkeys = HotkeyWatcher(self.playback, self.settings)
         self.audio = AudioImport(self.library, self.settings)
@@ -1952,7 +2427,8 @@ class Handler(BaseHTTPRequestHandler):
         q = EVENTS.add()
         try:
             hello = {"status": APP.playback.status, "jobs": APP.audio.jobs_view(), "sig": APP.library.sig,
-                     "simulated": SIMULATE, "queue": APP.queue.items(), "is_windows": IS_WINDOWS,
+                     "simulated": SIMULATE, "queue": APP.queue.items(), "queue_extra": APP.queue.extras(),
+                     "playlists": APP.playlists.items(), "is_windows": IS_WINDOWS,
                      "update": APP.updates.info()}
             self.wfile.write(f"event: hello\ndata: {json.dumps(hello)}\n\n".encode("utf-8"))
             self.wfile.flush()
@@ -2200,16 +2676,49 @@ def api_queue(h, query):
     if h.command == "POST":
         body = h._json_body()
         action = body.get("action")
-        if action not in ("add", "next", "remove", "move", "clear", "shuffle", "shuffle_all"):
+        if action not in ("add", "next", "remove", "move", "clear", "shuffle", "shuffle_all", "restore"):
             raise ApiError(400, "Unknown queue action.")
+        if action == "restore":                     # Undo after Play or Shuffle replaced the queue
+            items = [k for k in _keys(body.get("items")) if APP.library.exists(k)]
+            extras = [k for k in _keys(body.get("extras")) if k in items]
+            APP.queue.replace(items, extras)
+            return {"items": APP.queue.items(), "extras": APP.queue.extras()}
         key = body.get("key")
         if key is not None and not APP.library.exists(str(key)):
             raise ApiError(404, "That song isn't in the Songs folder anymore.")
         index = body.get("index")
         index = int(index) if isinstance(index, (int, float)) else None
         all_keys = [m["key"] for m in APP.library.listing()["songs"] if not m.get("error")]
-        return {"items": APP.queue.change(action, key, index, all_keys)}
-    return {"items": APP.queue.items()}
+        return {"items": APP.queue.change(action, key, index, all_keys), "extras": APP.queue.extras()}
+    return {"items": APP.queue.items(), "extras": APP.queue.extras()}
+
+
+def api_playlists(h, query):
+    if h.command == "POST":
+        return APP.playlists.change(h._json_body(), APP.library.exists)
+    return {"items": APP.playlists.items()}
+
+
+def api_play_list(h, query):
+    """Play a list of songs (all songs, favorites, a playlist, search results): in order, shuffled or with
+    Smart shuffle. The first one starts now and the rest go in the queue, replacing what was there."""
+    body = h._json_body()
+    mode = body.get("mode") if body.get("mode") in ("order", "shuffle", "smart") else "order"
+    keys = _keys(body.get("keys"))
+    all_keys = {m["key"] for m in APP.library.listing()["songs"] if not m.get("error")}
+    whole = bool(all_keys) and all_keys <= set(keys)
+    order, extras = build_play_order(keys, mode, APP.library, APP.settings, whole=whole)
+    if not order:
+        raise ApiError(400, "There are no songs to play in this list.")
+    with APP.playback.lock:                     # nothing else starts or changes the queue in between
+        before = APP.queue.replace(order[1:QUEUE_LIMIT + 1], [k for k in extras if k != order[0]])
+        try:
+            APP.playback.play(order[0])
+        except ApiError:
+            APP.queue.replace(before["items"], before["extras"])
+            raise
+    return {"playing": order[0], "items": APP.queue.items(), "extras": APP.queue.extras(),
+            "mixed_in": len(extras), "previous": before}
 
 
 _BIN = None
@@ -2568,7 +3077,8 @@ def api_calibrate_answer(h, query):
         message = f"Added a {new} ms pause around Shift for black keys. Play it again to check."
     elif setting == "key_hold_ms":
         new = {20: 40, 40: 70}.get(app["key_hold_ms"], min(120, app["key_hold_ms"] + 30))
-        message = f"Keys are now held for at least {new} ms. Play it again to check."
+        message = (f"Keys are now held for at least {new} ms. Play it again to check. If it still drops notes, "
+                   "raise Maximum Frame Rate in Roblox's settings (120 or more), or lower its graphics quality.")
     elif setting == "pedal_method":
         new = {"hold": "tap", "tap": "notes", "notes": "hold"}[app["pedal_method"]]
         message = {"tap": "Switched to tapping Space on and off. Play it again to check.",
@@ -2745,6 +3255,9 @@ ROUTES = {
     ("GET", "/api/app-settings"): api_app_settings,
     ("POST", "/api/app-settings"): api_app_settings,
     ("GET", "/api/queue"): api_queue,
+    ("GET", "/api/playlists"): api_playlists,
+    ("POST", "/api/playlists"): api_playlists,
+    ("POST", "/api/play-list"): api_play_list,
     ("POST", "/api/queue"): api_queue,
     ("POST", "/api/favorite"): api_favorite,
     ("POST", "/api/select"): api_select,
