@@ -8,7 +8,7 @@
 - **Keep playing:** when the queue ends, Smart shuffle carries on (switch in the Queue tab).
 - **Right-click menu** on songs: play, play next, queue, add to a playlist, favorite.
 - **Play counts**, and two new sorts: Most played and Newest.
-- **Faster:** PianoPilot remembers what it read from your songs, so it starts quickly with a big library and only loads a song's notes when it's needed. The song map draws at 30 fps while you're in Roblox, leaving more for Roblox. MP3s go to the graphics card in bigger batches (it remembers if your card needs smaller ones), and the log says where conversion time goes.
+- **Faster:** PianoPilot remembers what it read from your songs, so it starts quickly with a big library and only loads a song's notes when it's needed. The song map draws half as often while you're in Roblox, leaving more of the PC to Roblox. MP3s go to the graphics card in bigger batches (it remembers if your card needs smaller ones), and the log says where conversion time goes.
 - **Starting songs:** pressing F6 inside Roblox starts right away (no countdown); the countdown for the Play button can be changed in Settings.
 - **Update check.** Once a day PianoPilot asks GitHub whether a newer version is out and shows a small note at the top of the song list. Nothing about you or your songs is sent; turn it off in Settings.
 - **System requirements** are in the README and in the app's README.txt.

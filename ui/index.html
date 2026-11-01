@@ -103,9 +103,8 @@ details.details summary:hover { color: var(--ivory); }
 .cal-status { margin: 10px 0 0; color: var(--quiet) !important; font-size: 13px; }
 .tabbar { display: flex; align-items: center; gap: 0; padding: 0 12px 8px; overflow-x: auto; scrollbar-width: none; }
 .tab { flex: none; height: 30px; padding: 0 7px; border: 0; border-radius: 8px; background: none; color: var(--ivory-2); }
-.library { container-type: inline-size; }
-@container (max-width: 330px) { .tab .n { display: none; } }          /* a narrow list: the tabs keep their names, not the counts */
-@container (max-width: 300px) { .tab { padding: 0 5px; font-size: 14px; } }
+.tabbar.tight .tab .n { display: none; }          /* not enough room: the tabs keep their names, not the counts */
+.tabbar.tighter .tab { padding: 0 5px; font-size: 14px; }
 .tab:hover { color: var(--ivory); background: var(--raised); }
 .tab[aria-selected="true"] { color: var(--ivory); background: var(--raised); box-shadow: inset 0 -2px 0 var(--brass); }
 .tab .n { color: var(--quiet); margin-left: 3px; font-variant-numeric: tabular-nums; }
@@ -649,7 +648,7 @@ details.adv > summary { padding: 14px 0; }
         <ol class="steps">
           <li><div><strong>Sit at a piano in Roblox</strong><div class="s-text">Close the chat box first, or the notes get typed into it.</div></div></li>
           <li><div><strong>Pick a song here and press Play</strong><div class="s-text">Or press Space. Best for this song (under the title) picks good settings for you; Speed, Play like and the rest are below the song map.</div></div></li>
-          <li><div><strong>Click into the Roblox window</strong><div class="s-text">It counts down from 3, then plays (change the countdown in Settings). Pressing F6 inside Roblox starts right away.</div></div></li>
+          <li><div><strong>Click into the Roblox window</strong><div class="s-text" id="helpStart">It counts down from 3, then plays (change the countdown in Settings). Pressing F6 inside Roblox starts right away.</div></div></li>
           <li><div><strong>Click out of Roblox to pause</strong><div class="s-text">It never types into other windows. Click back into Roblox to carry on.</div></div></li>
         </ol>
       </section>
@@ -671,7 +670,7 @@ details.adv > summary { padding: 14px 0; }
         <h3>Playlists and shuffle</h3>
         <ul class="fixes">
           <li><b>Play, Shuffle and Smart shuffle</b> sit above every list: all songs, favorites, a playlist, even search results. The first song starts and the rest go in the queue.</li>
-          <li><b>Smart shuffle</b> plays your favorites and songs you haven't heard in a while more often, and songs you skip less often. On a playlist it mixes in a few similar songs, marked ✦.</li>
+          <li><b>Smart shuffle</b> plays your favorites and songs you haven't heard in a while more often, and songs you skip less often. On a playlist or your favorites it mixes in a few similar songs, marked ✦.</li>
           <li><b>Right-click any song</b> to play it next, queue it, or add it to a playlist. Make playlists in the Playlists tab.</li>
           <li><b>Keep playing</b> (in the Queue tab) carries on with Smart shuffle when the queue runs out.</li>
         </ul>
@@ -762,10 +761,11 @@ function toast(text, bad = false, action = null) {
   const t = $("#toast"); t.textContent = text; t.classList.toggle("bad", bad); t.classList.add("on");
   if (action) {          // one button, like Undo
     const b = document.createElement("button"); b.className = "toast-act"; b.textContent = action.label;
-    b.addEventListener("click", () => { t.classList.remove("on"); action.run(); });
+    b.addEventListener("click", () => { t.classList.remove("on"); b.remove(); action.run(); });
     t.append(b);
   }
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), bad ? 6000 : action ? 9000 : 3200);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove("on"); t.querySelectorAll(".toast-act").forEach(b => b.remove()); }, bad ? 6000 : action ? 9000 : 3200);
 }
 function debounce(fn, ms) {
   let t = null, args = [], running = Promise.resolve();
@@ -849,6 +849,7 @@ async function loadLibrary(select) {
     const d = await api("GET", "/api/library");
     S.songs = d.songs; S.sig = d.sig; S.loaded = true;
     renderLibrary();
+    if (pickDlg.open) { const have = new Set(S.songs.map(x => x.key)); pickChosen = new Set([...pickChosen].filter(k => have.has(k))); renderPick(); }
     const want = select || S.selected || (S.status.key) || d.last_song;
     if (want && S.songs.some(s => s.key === want)) { if (want !== S.selected || select) selectSong(want); }
     else if (S.selected && !S.songs.some(s => s.key === S.selected)) { S.selected = null; S.song = null; renderStage(); }
@@ -891,6 +892,7 @@ function renderLibrary() {
   $("#favCount").textContent = favs.length ? String(favs.length) : "";
   $("#plCount").textContent = S.playlists.length ? String(S.playlists.length) : "";
   $("#queueCount").textContent = S.queue.length ? String(S.queue.length) : "";
+  fitTabs();
   document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === S.tab)));
   $("#sortPick").disabled = S.tab === "queue" || S.tab === "playlists"; $("#sortPick").value = S.sort;
   const bar = $("#queueBar"), lb = $("#listBar");
@@ -925,6 +927,14 @@ function renderLibrary() {
     `<button class="tool" data-fav="${esc(s.key)}" aria-pressed="${!!s.favorite}" title="${s.favorite ? "Remove from favorites" : "Add to favorites"}" aria-label="Favorite">${s.favorite ? "★" : "☆"}</button>` +
     `<button class="tool" data-queue="${esc(s.key)}" title="Add to queue" aria-label="Add to queue">+</button>`)).join("");
 }
+
+function fitTabs() {
+  const bar = document.querySelector(".tabbar"); if (!bar) return;
+  bar.classList.remove("tight", "tighter");
+  if (bar.scrollWidth > bar.clientWidth + 1) bar.classList.add("tight");
+  if (bar.scrollWidth > bar.clientWidth + 1) bar.classList.add("tighter");
+}
+window.addEventListener("resize", fitTabs);
 
 // ---------- playlists, Play and Shuffle ----------
 const ICON = {
@@ -970,7 +980,8 @@ function renderPlaylists(ul, lb, q, byKey) {
   const rows = pl.songs.map((k, i) => [k, i]).filter(([k]) => byKey.has(k) && (!q || byKey.get(k).title.toLowerCase().includes(q)));
   if (!rows.length) { ul.innerHTML = `<li class="empty-lib"><p>No songs in this playlist match “${esc(S.search)}”.</p></li>`; return; }
   ul.innerHTML = rows.map(([k, i], n) => {
-    const tools = `${i ? `<button class="tool" data-plmove="${i}" title="Move up" aria-label="Move up">↑</button>` : ""}<button class="tool" data-plremove="${i}" data-key="${esc(k)}" title="Remove from this playlist" aria-label="Remove from this playlist">✕</button>`;
+    const above = n ? rows[n - 1][1] : null;           // the song shown above (hidden or missing ones don't count)
+    const tools = `${above !== null ? `<button class="tool" data-plmove="${i}" data-to="${above}" title="Move up" aria-label="Move up">↑</button>` : ""}<button class="tool" data-plremove="${i}" data-key="${esc(k)}" title="Remove from this playlist" aria-label="Remove from this playlist">✕</button>`;
     return songRow(byKey.get(k), `<span class="qnum">${n + 1}</span>`, tools).replace("<li>", `<li data-pl-index="${i}">`);
   }).join("");
 }
@@ -991,14 +1002,21 @@ function listLabel(n) {
   if (S.tab === "favorites" && !S.search.trim()) return `your favorites (${songs})`;
   return songs;
 }
-async function playList(keys, mode, label) {
+function listSource() {
+  if (S.tab === "playlists") return "playlist";
+  if (S.search.trim()) return "search";
+  return S.tab === "favorites" ? "favorites" : "songs";
+}
+async function playList(keys, mode, label, source = listSource()) {
   if (!keys.length) return;
   try {
-    const d = await api("POST", "/api/play-list", { keys, mode });
+    const d = await api("POST", "/api/play-list", { keys, mode, source });
     S.queue = d.items; S.queueExtra = d.extras || [];
     const prev = (d.previous && d.previous.items) || [];
     let text = mode === "order" ? `Playing ${label}.` : mode === "shuffle" ? `Shuffling ${label}.`
       : `Smart shuffling ${label}` + (d.mixed_in ? `, with ${d.mixed_in} similar ${d.mixed_in === 1 ? "song" : "songs"} mixed in (✦).` : ".");
+    if (d.skipped && d.skipped.length) text += ` Skipped ${d.skipped.length === 1 ? `“${d.skipped[0]}”` : `${d.skipped.length} songs`}: ${d.skipped.length === 1 ? "it" : "they"} can't play.`;
+    if (d.total > d.items.length + 1 + (d.skipped || []).length) text += ` The queue holds ${d.items.length}, so the last ${d.total - d.items.length - 1} won't play this time.`;
     renderLibrary(); renderStatus();
     if (d.playing && d.playing !== S.selected) selectSong(d.playing);
     if (prev.length) {
@@ -1049,7 +1067,8 @@ async function addToPlaylist(pid, keys) {
     const d = await playlistAction({ action: "add", id: pid, keys });
     const pl = d.items.find(p => p.id === pid);
     toast(d.added ? `Added ${d.added === 1 ? "to" : `${d.added} songs to`} “${pl.name}”.` + (d.already ? ` ${d.already} ${d.already === 1 ? "was" : "were"} already in it.` : "")
-      : d.full ? `“${pl.name}” is full.` : `Already in “${pl.name}”.`);
+        + (d.left_out ? ` It's full now (2,000 songs), so ${d.left_out} ${d.left_out === 1 ? "wasn't" : "weren't"} added.` : "")
+      : d.full ? `“${pl.name}” is full (2,000 songs).` : `Already in “${pl.name}”.`, !!d.left_out && !d.added);
   } catch (e) { toast(e.message, true); }
 }
 async function renamePlaylist(pl) {
@@ -1115,7 +1134,7 @@ ctxMenu.addEventListener("keydown", e => {
   const btns = [...ctxMenu.querySelectorAll("button:not(:disabled)")]; const i = btns.indexOf(document.activeElement);
   if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const n = btns[(i + (e.key === "ArrowDown" ? 1 : btns.length - 1)) % btns.length]; if (n) n.focus(); }
   else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideMenu(); }
-  else if (e.key === "Tab") hideMenu(false);
+  else if (e.key === "Tab") { e.preventDefault(); hideMenu(); }
 });
 document.addEventListener("mousedown", e => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(false); }, true);
 window.addEventListener("blur", () => hideMenu(false));
@@ -1247,11 +1266,11 @@ $("#songs").addEventListener("click", e => {
     else if (tool.dataset.plPlay) {
       const pl = S.playlists.find(p => p.id === tool.dataset.plPlay);
       const by = new Set(S.songs.filter(s => !s.error).map(s => s.key));
-      if (pl) { const keys = pl.songs.filter(k => by.has(k)); if (keys.length) playList(keys, "order", `${pl.name} (${keys.length === 1 ? "1 song" : `${keys.length} songs`})`); else toast(`“${pl.name}” is empty.`); }
+      if (pl) { const keys = pl.songs.filter(k => by.has(k)); if (keys.length) playList(keys, "order", `${pl.name} (${keys.length === 1 ? "1 song" : `${keys.length} songs`})`, "playlist"); else toast(`“${pl.name}” is empty.`); }
     }
     else if (tool.dataset.plmove || tool.dataset.plremove) {
       const pl = openPlaylist(); if (!pl) return;
-      const body = tool.dataset.plmove ? { action: "move", id: pl.id, index: +tool.dataset.plmove, to: +tool.dataset.plmove - 1 }
+      const body = tool.dataset.plmove ? { action: "move", id: pl.id, index: +tool.dataset.plmove, to: +tool.dataset.to }
         : { action: "remove", id: pl.id, index: +tool.dataset.plremove, key: tool.dataset.key };
       playlistAction(body).catch(err => toast(err.message, true));
     }
@@ -1494,7 +1513,8 @@ function renderTransport() {
   };
   const labels = { play: "Play", resume: "Resume", pause: "Pause" };
   btn.innerHTML = icons[mode]; btn.setAttribute("aria-label", labels[mode]); btn.title = `${labels[mode]} (Space)`;
-  $("#stopBtn").disabled = !here;
+  const between = st.state === "finished" && st.key === S.selected && (st.next || st.next_auto);   // the next song is about to start
+  $("#stopBtn").disabled = !here && !between;
 }
 
 function renderControls() {
@@ -2308,6 +2328,7 @@ function renderAppSettings() {
   const a = S.app;
   $("#countdownPick").value = String(a.countdown ?? 3);
   const pp = a.hotkeys && a.hotkeys.play_pause;
+  renderHelpStart();
   $("#countdownIntro").textContent = "After you press Play here and click into Roblox, PianoPilot counts down before the first note."
     + (pp ? ` Pressing ${keyName(pp)} inside Roblox starts right away.` : "");
   document.querySelectorAll('input[name="pedal_method"]').forEach(r => { r.checked = r.value === a.pedal_method; });
@@ -2555,8 +2576,14 @@ async function afterReset() {
 
 // ---------- help ----------
 const helpDlg = $("#helpDlg");
+function renderHelpStart() {
+  const a = S.app || {}, pp = a.hotkeys && a.hotkeys.play_pause, cd = a.countdown ?? 3;
+  $("#helpStart").textContent = (cd ? `It counts down from ${cd}, then plays (change the countdown in Settings).` : "It starts right away (no countdown; change that in Settings).")
+    + (pp ? ` Pressing ${keyName(pp)} inside Roblox starts right away.` : "");
+}
 async function openHelp() {
   if (helpDlg.open) return;
+  renderHelpStart();
   const h = (S.app && S.app.hotkeys) || {};
   $("#helpKeys").innerHTML = Object.entries(HOTKEY_LABELS).map(([action, label]) =>
     `<kbd class="${h[action] ? "" : "off"}">${esc(keyName(h[action]))}</kbd><span>${label}</span>`).join("");
@@ -2616,7 +2643,7 @@ $("#delYes").addEventListener("click", async () => {
 // ---------- keyboard ----------
 window.addEventListener("keydown", e => {
   if (e.code === "Space" && e.repeat && !e.target.closest("input, textarea, [contenteditable]")) { e.preventDefault(); return; }   // held down: once is enough
-  if (e.code === "Space" && e.target.closest(".song") && S.song && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  if (e.code === "Space" && e.target.closest(".song[data-key]") && S.song && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault(); onPlayButton(); return;            // just clicked a song: Space plays it
   }
   if (e.target.closest("input, textarea, button, select, summary, a, dialog, [contenteditable]") || e.ctrlKey || e.metaKey || e.altKey) return;

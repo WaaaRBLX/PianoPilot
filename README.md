@@ -15,7 +15,7 @@ PianoPilot plays songs on Roblox pianos for you. Add an MP3 or a MIDI file, pres
 - **Takes MIDI files and text sheets** like `[tu] y o | p` as they are.
 - **Best for this song.** One click picks the settings that suit the song (how it fits on the 61 keys, pedal, tracks, chord size, note length) and says what it changed. New songs get this automatically.
 - **Plays like a person if you want.** Perfect, Pro, Casual or Beginner add human timing and a few mistakes.
-- **Playlists, Shuffle and Smart shuffle.** Play any list (all songs, favorites, a playlist, search results) in order or shuffled. Smart shuffle plays what you like more often, skips what you just heard, and mixes in similar songs. Keep playing carries on when the queue ends.
+- **Playlists, Shuffle and Smart shuffle.** Play any list (all songs, favorites, a playlist, search results) in order or shuffled. Smart shuffle plays what you like more often, holds back what you just heard, and on a playlist or your favorites mixes in a few similar songs. Keep playing carries on when the queue ends.
 - **Speed, loops, a queue, favorites** and a small mini player that stays on top of Roblox.
 - **Never types into the wrong window.** Click out of Roblox and it pauses; click back in and it carries on.
 - **A calibration test** checks how your piano handles black keys, fast notes and the pedal, and fixes the settings for you.

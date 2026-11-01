@@ -291,6 +291,17 @@ class Settings:
             self.data["app"][name] = value
         self.save()
 
+    def edit_app(self, fn):
+        """Change app settings in one step: fn(app) reads the live values and returns {name: new value}.
+        Nothing can change in between (a rename or a delete also goes through this lock), so a stale copy
+        can never be written back. If fn raises, nothing changes."""
+        with self.lock:
+            updates = fn(self.data["app"])
+            self.data["app"].update(updates or {})
+        if updates:
+            self.save()
+        return updates
+
     def forget_song(self, key):
         """A song was deleted: drop its settings, star, queue entries and last-played time."""
         with self.lock:
@@ -348,8 +359,7 @@ class Settings:
             if isinstance(app.get("playlists"), list):
                 for pl in app["playlists"]:
                     if isinstance(pl, dict) and isinstance(pl.get("songs"), list) and old in pl["songs"]:
-                        moved = [new if k == old else k for k in pl["songs"]]
-                        pl["songs"] = [k for i, k in enumerate(moved) if k not in moved[:i]]   # no doubles
+                        pl["songs"] = list(dict.fromkeys(new if k == old else k for k in pl["songs"]))   # no doubles
             for name in ("last_song", "selected"):
                 if app.get(name) == old:
                     app[name] = new
@@ -714,72 +724,123 @@ def nothing_to_play(song, cfg):
     return "Nothing to play: the chosen tracks have no notes."
 
 
+def _clean_keys(raw):
+    return [k for k in raw if isinstance(k, str)] if isinstance(raw, list) else []
+
+
+def queue_view(settings):
+    """The queue and its Smart shuffle extras, as every window gets it."""
+    with settings.lock:
+        items = _clean_keys(settings.data["app"].get("queue"))
+        extras = [k for k in _clean_keys(settings.data["app"].get("queue_extra")) if k in items]
+    return {"items": items, "extras": extras}
+
+
 class SongQueue:
-    """Songs to play next, saved between sessions."""
+    """Songs to play next, saved between sessions. Every change is made in one step under the settings lock,
+    so a song renamed at the same moment keeps its place."""
 
     def __init__(self, settings):
         self.settings = settings
         self.lock = threading.Lock()
 
     def items(self):
-        q = self.settings.app("queue", [])
-        return [k for k in q if isinstance(k, str)] if isinstance(q, list) else []
+        return queue_view(self.settings)["items"]
 
     def extras(self):
         """Songs Smart shuffle mixed in (shown with a mark in the queue)."""
-        x = self.settings.app("queue_extra", [])
-        return [k for k in x if isinstance(k, str)] if isinstance(x, list) else []
+        return queue_view(self.settings)["extras"]
 
-    def _save(self, items, extras=None):
-        items = items[:QUEUE_LIMIT]
-        extras = [k for k in (self.extras() if extras is None else extras) if k in items]
-        self.settings.set_app("queue", items)
-        self.settings.set_app("queue_extra", extras)
-        EVENTS.send("queue", {"items": items, "extras": extras})
+    def _edit(self, change):
+        """change(items, extras) -> (items, extras), run on the live queue."""
+        def fn(app):
+            items = _clean_keys(app.get("queue"))
+            extras = [k for k in _clean_keys(app.get("queue_extra")) if k in items]
+            items, extras = change(items, extras)
+            items = items[:QUEUE_LIMIT]
+            return {"queue": items, "queue_extra": [k for k in dict.fromkeys(extras) if k in items]}
+        out = self.settings.edit_app(fn)
+        EVENTS.send("queue", {"items": out["queue"], "extras": out["queue_extra"]})
+        return out["queue"]
 
     def replace(self, items, extras=()):
         """Put a whole new list in the queue. Returns what was there before (for Undo)."""
         with self.lock:
-            before = {"items": self.items(), "extras": self.extras()}
-            self._save(list(items), list(extras))
+            before = {}
+
+            def change(old, old_extras):
+                before.update(items=old, extras=old_extras)
+                return list(items), list(extras)
+            self._edit(change)
             return before
 
     def change(self, action, key=None, index=None, all_keys=()):
         with self.lock:
-            items = self.items()
-            if action == "add" and key:
-                items.append(key)
-            elif action == "next" and key:
-                items.insert(0, key)
-            elif action == "remove" and index is not None and 0 <= index < len(items):
-                items.pop(index)
-            elif action == "move" and index is not None and 0 < index < len(items):
-                items[index - 1], items[index] = items[index], items[index - 1]
-            elif action == "clear":
-                items = []
-            elif action == "shuffle":
-                random.shuffle(items)
-            elif action == "shuffle_all":
-                items = list(all_keys)
-                random.shuffle(items)
-            self._save(items)
-            return items
+            def edit(items, extras):
+                items = list(items)
+                if action == "add" and key:
+                    items.append(key)
+                elif action == "next" and key:
+                    items.insert(0, key)
+                elif action == "remove" and index is not None and 0 <= index < len(items):
+                    items.pop(index)
+                elif action == "move" and index is not None and 0 < index < len(items):
+                    items[index - 1], items[index] = items[index], items[index - 1]
+                elif action == "clear":
+                    items = []
+                elif action == "shuffle":
+                    random.shuffle(items)
+                elif action == "shuffle_all":
+                    items = list(all_keys)
+                    random.shuffle(items)
+                    extras = []
+                return items, extras
+            return self._edit(edit)
 
     def pop_next(self, exists):
+        """Take the first song that's still there off the queue (dropping missing ones before it). The check
+        for which songs exist happens outside the settings lock (it waits for a folder scan), so the queue is
+        read again under the lock before it changes."""
         with self.lock:
-            items = self.items()
-            while items:
-                key = items.pop(0)
-                if exists(key):
-                    self._save(items)
-                    return key
-            self._save(items)
+            for _attempt in range(5):
+                items = self.items()
+                pick = next((k for k in items if exists(k)), None)
+                missing = set(items[:items.index(pick)] if pick else items)
+                retry = []
+
+                def edit(now, extras):
+                    if pick is not None and pick not in now:      # renamed or removed meanwhile: look again
+                        retry.append(True)
+                        return now, extras
+                    cut = now.index(pick) if pick is not None else len(now)
+                    return [k for k in now[:cut] if k not in missing] + now[cut + 1:], extras
+                self._edit(edit)
+                if not retry:
+                    return pick
             return None
 
 
 QUEUE_LIMIT = 500
+GPU_BATCH = 8                      # audio pieces per graphics-card run when converting MP3s (most it will try)
 PLAYLIST_LIMIT = 200               # playlists
 PLAYLIST_SONGS = 2000              # songs in one playlist
+
+
+def clean_playlists(raw):
+    out, ids = [], set()
+    for pl in raw if isinstance(raw, list) else []:
+        if not isinstance(pl, dict) or not isinstance(pl.get("id"), str) or pl["id"] in ids:
+            continue
+        ids.add(pl["id"])
+        out.append({"id": pl["id"], "name": clean_playlist_name(pl.get("name")),
+                    "songs": list(dict.fromkeys(_clean_keys(pl.get("songs"))))[:PLAYLIST_SONGS],
+                    "created": pl.get("created") if isinstance(pl.get("created"), (int, float)) else 0})
+    return out[:PLAYLIST_LIMIT]
+
+
+def playlists_view(settings):
+    with settings.lock:
+        return clean_playlists(settings.data["app"].get("playlists"))
 
 
 class Playlists:
@@ -790,17 +851,7 @@ class Playlists:
         self.lock = threading.Lock()
 
     def items(self):
-        raw = self.settings.app("playlists", [])
-        out, ids = [], set()
-        for pl in raw if isinstance(raw, list) else []:
-            if not isinstance(pl, dict) or not isinstance(pl.get("id"), str) or pl["id"] in ids:
-                continue
-            ids.add(pl["id"])
-            songs = [k for k in pl.get("songs", []) if isinstance(k, str)] if isinstance(pl.get("songs"), list) else []
-            out.append({"id": pl["id"], "name": clean_playlist_name(pl.get("name")),
-                        "songs": list(dict.fromkeys(songs))[:PLAYLIST_SONGS],
-                        "created": pl.get("created") if isinstance(pl.get("created"), (int, float)) else 0})
-        return out[:PLAYLIST_LIMIT]
+        return playlists_view(self.settings)
 
     def get(self, pid):
         for pl in self.items():
@@ -808,20 +859,22 @@ class Playlists:
                 return pl
         raise ApiError(404, "That playlist doesn't exist anymore.")
 
-    def _save(self, items):
-        self.settings.set_app("playlists", items)
-        EVENTS.send("playlists", {"items": items})
-
     def change(self, body, exists):
-        """One edit. Returns {"items": all playlists, ...} plus what the edit made or removed."""
+        """One edit, made in one step on the live playlists. Returns {"items": all playlists, ...} plus what
+        the edit made or removed. Which songs exist is checked first, outside the settings lock."""
         action = body.get("action")
-        with self.lock:
-            items = self.items()
-            out = {}
+        incoming = _keys(body.get("keys"))
+        if action == "restore" and isinstance(body.get("playlist"), dict):
+            incoming = _keys(body["playlist"].get("songs"))
+        here = {k: exists(k) for k in dict.fromkeys(incoming)}
+        good = lambda keys: [k for k in dict.fromkeys(keys) if here.get(k)]
+        out = {}
+
+        def fn(app):
+            items = clean_playlists(app.get("playlists"))
             if action == "create":
                 if len(items) >= PLAYLIST_LIMIT:
                     raise ApiError(400, f"You can have up to {PLAYLIST_LIMIT} playlists.")
-                keys = [k for k in dict.fromkeys(_keys(body.get("keys"))) if exists(k)][:PLAYLIST_SONGS]
                 taken = {pl["name"].lower() for pl in items}
                 name = clean_playlist_name(body.get("name"), "")
                 if not name:
@@ -829,7 +882,8 @@ class Playlists:
                     while f"playlist {n}" in taken:
                         n += 1
                     name = f"Playlist {n}"
-                pl = {"id": secrets.token_hex(4), "name": name, "songs": keys, "created": int(time.time())}
+                pl = {"id": secrets.token_hex(4), "name": name, "songs": good(incoming)[:PLAYLIST_SONGS],
+                      "created": int(time.time())}
                 items.append(pl)
                 out["created"] = pl
             elif action == "restore":                   # Undo for a delete
@@ -841,7 +895,7 @@ class Playlists:
                     index = int(index) if isinstance(index, (int, float)) else len(items)
                     items.insert(max(0, min(len(items), index)), {
                         "id": pl["id"][:16], "name": clean_playlist_name(pl.get("name")),
-                        "songs": [k for k in dict.fromkeys(_keys(pl.get("songs"))) if exists(k)][:PLAYLIST_SONGS],
+                        "songs": good(incoming)[:PLAYLIST_SONGS],
                         "created": pl.get("created") if isinstance(pl.get("created"), (int, float)) else 0})
             else:
                 pid = body.get("id")
@@ -858,12 +912,12 @@ class Playlists:
                     items.pop(index)
                     out.update(deleted=pl, index=index)
                 elif action == "add":
-                    keys = [k for k in dict.fromkeys(_keys(body.get("keys"))) if exists(k)]
+                    keys = good(incoming)
                     new = [k for k in keys if k not in pl["songs"]]
-                    room = PLAYLIST_SONGS - len(pl["songs"])
-                    pl["songs"] += new[:max(0, room)]
-                    out.update(added=min(len(new), max(0, room)), already=len(keys) - len(new),
-                               full=len(new) > room)
+                    room = max(0, PLAYLIST_SONGS - len(pl["songs"]))
+                    pl["songs"] += new[:room]
+                    out.update(added=min(len(new), room), already=len(keys) - len(new),
+                               full=len(new) > room, left_out=max(0, len(new) - room))
                 elif action == "remove":
                     at = body.get("index")
                     key = body.get("key")
@@ -878,9 +932,13 @@ class Playlists:
                         pl["songs"].insert(to, pl["songs"].pop(at))
                 else:
                     raise ApiError(400, "Unknown playlist action.")
-            self._save(items)
-            out["items"] = items
-            return out
+            return {"playlists": items}
+
+        with self.lock:
+            items = self.settings.edit_app(fn)["playlists"]
+        EVENTS.send("playlists", {"items": items})
+        out["items"] = items
+        return out
 
 
 def _keys(raw):
@@ -962,12 +1020,17 @@ def smart_order(keys, meta, ctx, rng=random):
     return spread_artists(order, lambda k: artist_of(meta.get(k, {}).get("title", "")))
 
 
-def smart_extras(chosen, pool, meta, ctx, rng=random):
+def extras_wanted(n):
+    """How many similar songs Smart shuffle mixes into a list of n: about one for every four, at most 10."""
+    return min(10, max(1, n // 4)) if n >= 3 else 0
+
+
+def smart_extras(chosen, pool, meta, ctx, rng=random, want=None):
     """Songs from the rest of the library that suit a playlist (same artists, similar speed and length),
-    for Smart shuffle to mix in: about one for every four songs, at most 10."""
+    most alike first. want=None: extras_wanted(len(chosen)); want=-1: every candidate, ranked."""
     chosen_set = set(chosen)
     others = [k for k in pool if k not in chosen_set]
-    want = min(10, max(1, len(chosen) // 4)) if len(chosen) >= 3 else 0
+    want = extras_wanted(len(chosen)) if want is None else len(others) if want < 0 else want
     if not others or not want:
         return []
     def median(values):
@@ -1006,9 +1069,10 @@ def mix_in(order, extras):
     return out
 
 
-def build_play_order(keys, mode, library, settings, whole=False, rng=random):
-    """The order to play `keys` in: as listed ("order"), shuffled, or Smart shuffle (which may mix in similar
-    songs from the rest of the library unless `whole` is the whole library). Returns (order, extras)."""
+def build_play_order(keys, mode, library, settings, mix=False, rng=random):
+    """The order to play `keys` in: as listed ("order"), shuffled, or Smart shuffle, which with `mix` (a
+    playlist or the favorites) mixes in a few similar songs from the rest of the library.
+    Returns (order, extras)."""
     listing = {m["key"]: m for m in library.listing()["songs"] if not m.get("error")}
     keys = [k for k in dict.fromkeys(keys) if k in listing]
     if mode == "shuffle":
@@ -1019,14 +1083,50 @@ def build_play_order(keys, mode, library, settings, whole=False, rng=random):
         return keys, []
     ctx = smart_context(settings)
     order = smart_order(keys, listing, ctx, rng)
-    extras = [] if whole else smart_extras(keys, list(listing), listing, ctx, rng)
-    return mix_in(order, extras), extras
+    artist = lambda k: artist_of(listing.get(k, {}).get("title", ""))
+    extras = []
+    if mix:
+        # Take the most alike, but never one that would leave an artist with too many songs to keep apart
+        # (more than half the list).
+        counts, total = {}, len(keys)
+        for k in keys:
+            if artist(k):
+                counts[artist(k)] = counts.get(artist(k), 0) + 1
+        for k in smart_extras(keys, list(listing), listing, ctx, rng, want=-1):
+            if len(extras) >= extras_wanted(len(keys)):
+                break
+            a = artist(k)
+            if a and counts.get(a, 0) + 1 > (total + 2) // 2:
+                continue
+            extras.append(k)
+            total += 1
+            if a:
+                counts[a] = counts.get(a, 0) + 1
+    if not extras:
+        return order, []
+    mixed = spread_artists(mix_in(order, extras), artist)        # the extras mustn't bring artists together
+    if mixed[0] in extras:                                        # start with one of your own songs
+        for j, k in enumerate(mixed):
+            if k in extras:
+                continue
+            moved = [k] + mixed[:j] + mixed[j + 1:]
+            if _repeats(moved, artist) <= _repeats(mixed, artist):
+                mixed = moved
+                break
+    return mixed, extras
 
 
-def smart_next(library, settings, exclude=(), after=None, rng=random):
+def _repeats(order, artist):
+    names = [artist(k) for k in order]
+    return sum(1 for a, b in zip(names, names[1:]) if a and a == b)
+
+
+def smart_next(library, settings, exclude=(), after=None, never=(), rng=random):
     """One song for Keep playing: a Smart shuffle pick from the whole library, skipping what just played,
-    and not by the same artist as `after` (the song that just played) when there's a choice."""
-    listing = {m["key"]: m for m in library.listing()["songs"] if not m.get("error")}
+    and not by the same artist as `after` (the song that just played) when there's a choice. `never` songs
+    are left out even when nothing else is left (they couldn't be played)."""
+    never = set(never)
+    listing = {m["key"]: m for m in library.listing()["songs"] if not m.get("error") and m["key"] not in never}
     exclude = set(exclude)
     pool = [k for k in listing if k not in exclude] or [k for k in listing if k != after] or list(listing)
     if not pool:
@@ -1052,6 +1152,7 @@ class Library:
         self.index_path = index_path
         self.index = self._load_index()     # song info saved last time, so starting up needn't read every file
         self.index_sig = None
+        self.bad_tries = {}        # song file that couldn't be read -> how many scans tried it
         self.sig = ""
         self.scanned = False       # the first scan of this session
         self.on_new = None         # called with the keys of newly added songs
@@ -1071,15 +1172,17 @@ class Library:
                 return {}
             songs = raw.get("songs")
             return {k: v for k, v in songs.items() if isinstance(v, list) and len(v) == 3 and isinstance(v[2], dict)
-                    and v[2].get("key") == k} if isinstance(songs, dict) else {}
+                    and v[2].get("key") == k and not v[2].get("error")} if isinstance(songs, dict) else {}
         except (OSError, ValueError, AttributeError):
             return {}
 
     def _save_index(self):
         if not self.index_path or self.index_sig == self.sig:
             return
+        # Songs that couldn't be read aren't saved: the next start reads them again (the problem may have been
+        # a moment's lock by antivirus or a cloud folder).
         data = {"format": INDEX_FORMAT, "version": VERSION,
-                "songs": {k: [e[0], e[1], e[3]] for k, e in self.cache.items()}}
+                "songs": {k: [e[0], e[1], e[3]] for k, e in self.cache.items() if e[2] is not None}}
         tmp = Path(str(self.index_path) + ".tmp")
         try:
             tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -1189,16 +1292,21 @@ class Library:
             gone.setdefault((mtime, size), []).append(k)
         for k in candidates:
             came.setdefault((seen[k][0], seen[k][1]), []).append(k)
+        moved = False
         for stamp, keys in came.items():
             for old, new in self._pair(gone.get(stamp, ()), keys):
                 was_waiting = self.recent_gone.pop(old)[3]
                 self.settings.move_song(old, new)       # its star, queue spot and settings go with it
+                moved = True
                 if was_waiting:                         # not set up yet: the new name takes its place in line
                     self.waiting[new] = stamp
                 else:                                   # a song that was already here: not new at all
                     if new in arrived:
                         arrived.remove(new)
                     self.waiting.pop(new, None)
+        if moved:                                       # every window shows the new name in its lists
+            EVENTS.send("playlists", {"items": playlists_view(self.settings)})
+            EVENTS.send("queue", queue_view(self.settings))
         now = time.time()
         ready, waiting = [], {}
         for k in set(arrived) | (set(self.waiting) & set(seen)):
@@ -1228,8 +1336,9 @@ class Library:
                         seen[key] = self.cache[key]
                     continue
                 old = self.cache.get(key)
-                if old and old[0] == st.st_mtime and old[1] == st.st_size:
-                    seen[key] = old
+                if old and old[0] == st.st_mtime and old[1] == st.st_size and (
+                        old[2] is not None or self.bad_tries.get(key, 0) >= 3):
+                    seen[key] = old                 # unchanged (a file that failed is tried 3 times, then left)
                     continue
                 saved = self.index.get(key)
                 if saved and saved[0] == st.st_mtime and saved[1] == st.st_size:
@@ -1239,10 +1348,14 @@ class Library:
                 try:
                     song = pp.load_midi(str(path))
                     meta = self._meta(key, path, song)
+                    self.bad_tries.pop(key, None)
                 except Exception as exc:
                     song, meta = None, self._meta(key, path, None, error=f"Couldn't read this MIDI file ({exc})")
+                    self.bad_tries[key] = self.bad_tries.get(key, 0) + 1
                 seen[key] = (st.st_mtime, st.st_size, song, meta)
             self.index = {}                         # only needed for the first scan
+            for k in [k for k in self.bad_tries if k not in seen]:
+                del self.bad_tries[k]
             for k in [k for k in self.loaded if k not in seen]:
                 del self.loaded[k]
             for k, e in seen.items():
@@ -1257,7 +1370,6 @@ class Library:
             changed = digest.hexdigest() != self.sig
             self.sig = digest.hexdigest()
             self._save_index()
-            self._trim()
             # Set new songs up before anyone else can look at them: another refresh (the folder watcher, or
             # the request that added the song) waits here until the settings are saved.
             done, broke = set(ready), False
@@ -1284,6 +1396,7 @@ class Library:
                     self.known = known
                 except Exception:
                     traceback.print_exc()
+            self._trim()                # after new songs were set up, so they weren't let go and read again
         return changed
 
     def listing(self):
@@ -1315,14 +1428,17 @@ class Library:
             raise ApiError(404, "That song isn't in the Songs folder anymore.")
         # Read its notes now (outside the lock: a long song mustn't hold up the rest of the app).
         path = self.folder / key
-        try:
-            song = pp.load_midi(str(path))
-        except Exception as exc:
-            with self.lock:
-                if self.cache.get(key) is entry:
-                    self.cache[key] = (entry[0], entry[1], None,
-                                       self._meta(key, path, None, error=f"Couldn't read this MIDI file ({exc})"))
-            raise ApiError(404, f"Couldn't read this song's file ({exc}).")
+        for attempt in range(3):
+            try:
+                song = pp.load_midi(str(path))
+                break
+            except OSError as exc:                  # busy for a moment (antivirus, a cloud folder): try again
+                if attempt == 2:
+                    raise ApiError(409, f"Windows wouldn't let PianoPilot open this song's file right now ({exc}). "
+                                        "Try again in a moment.")
+                time.sleep(0.2)
+            except Exception as exc:                # it changed since it was last read: the next scan sorts it out
+                raise ApiError(404, f"Couldn't read this song's file ({exc}). If you just changed it, wait a moment.")
         with self.lock:
             now = self.cache.get(key)
             if now and now[0] == entry[0] and now[1] == entry[1]:
@@ -1399,6 +1515,11 @@ class Playback:
         self.last_seeds = {}       # song -> seed of its most recent take
         self.status = {"state": "idle", "pos": 0.0, "total": 0.0, "key": None}
         self.counted = True        # this play has been added to the song's play count
+        self.forgiven = True       # this play has taken one skip off the song (it played to the end)
+        self.listened = 0.0        # seconds of this play actually heard (seeks and pauses don't count)
+        self.last_pos = None
+        self.cur_total = 0.0
+        self.gen = 0               # goes up on every play and stop, so a queued "next song" knows it's stale
 
     def keep_playing(self):
         raw = self.library.settings.app("player")
@@ -1417,16 +1538,40 @@ class Playback:
             counts = dict(sorted(counts.items(), key=lambda kv: _count(kv[1]))[-5000:])
         settings.set_app(name, counts)
 
-    def _count_play(self, key, finished):
-        """A song counts as played once half of it has played (or it reached the end)."""
-        self.counted = True
-        try:
-            self._bump_count("plays", key)
-            if finished:
-                self._bump_count("skips", key, -1)   # listened all the way: forgive one skip
-            EVENTS.send("plays", {"key": key, "plays": _count(self.library.settings.app("plays", {}).get(key))})
-        except Exception:
-            traceback.print_exc()
+    def _count_later(self, name, key, by):
+        """Save a play or skip count on its own thread: saving settings takes a moment, and the player
+        thread (which reports progress) must never wait for a disk."""
+        def run():
+            try:
+                self._bump_count(name, key, by)
+                if name == "plays":
+                    EVENTS.send("plays", {"key": key, "plays": _count(self.library.settings.app("plays", {}).get(key))})
+            except Exception:
+                traceback.print_exc()
+        threading.Thread(target=run, name="counts", daemon=True).start()
+
+    def _track_listening(self, key, state, pos, total):
+        """Add up what was actually heard; count a play once 30 s or half the song (whichever is less) was
+        heard, and forgive one skip when a song plays to its end after being heard for at least half."""
+        if key == "__test__":
+            return
+        self.cur_total = total or self.cur_total
+        if state in ("playing", "finished") and self.last_pos is not None:
+            step = (self.cur_total if state == "finished" else pos) - self.last_pos
+            if 0 < step < 1.5:                      # seeks and loops jump; they aren't listening
+                self.listened += step
+        self.last_pos = pos if state == "playing" else None
+        need = min(30.0, self.cur_total / 2) if self.cur_total else 30.0
+        if not self.counted and self.listened >= need:
+            self.counted = True
+            self._count_later("plays", key, 1)
+        if state == "finished" and not self.forgiven and self.listened >= self.cur_total / 2:
+            self.forgiven = True
+            self._count_later("skips", key, -1)
+
+    def heard_little(self):
+        """The current song was heard a little, then skipped: started for real, but under 30 s and a third."""
+        return (self.status.get("state") in ("playing", "paused") and 0 < self.listened < min(30.0, self.cur_total * 0.3))
 
     def _publisher(self, player, key):
         def publish(info):
@@ -1446,37 +1591,56 @@ class Playback:
             elif keep:
                 status["next_auto"] = True              # Keep playing picks one with Smart shuffle
             finished = info.get("state") == "finished"
-            total = info.get("total") or 0
-            if not self.counted and key != "__test__" and (finished or total > 0 and info.get("pos", 0) >= total / 2):
-                self._count_play(key, finished)
+            self._track_listening(key, info.get("state"), info.get("pos", 0.0) or 0.0, info.get("total") or 0.0)
             self.status = status
             EVENTS.send("status", status)
             if finished and (upcoming or keep) and key != "__test__":
-                threading.Thread(target=self._advance, args=(player,), daemon=True).start()
+                threading.Thread(target=self._advance, args=(player, self.gen), daemon=True).start()
         return publish
 
-    def _keep_playing_pick(self, current):
+    def _keep_playing_pick(self, current, tried=()):
         """The next song for Keep playing: Smart shuffle over the library, not one heard in the last 2 hours
-        (unless that's all there is)."""
+        (unless that's all there is), nor one that just failed to play."""
         played = self.library.settings.app("played", {})
         recent = {k for k, t in (played.items() if isinstance(played, dict) else [])
                   if isinstance(t, (int, float)) and time.time() - t < 2 * 3600}
-        return smart_next(self.library, self.library.settings, exclude=recent | {current}, after=current)
+        listing = [m["key"] for m in self.library.listing()["songs"] if not m.get("error")]
+        if not [k for k in listing if k not in set(tried)]:
+            return None
+        return smart_next(self.library, self.library.settings, exclude=recent | {current} | set(tried), after=current,
+                          never=set(tried))
 
-    def _advance(self, finished_player):
-        """Play the next song in the queue a moment after one finishes."""
-        time.sleep(2.0)
-        with self.lock:
-            if self.player is not finished_player:     # something else started meanwhile
-                return
+    def _play_next_from(self, current, countdown):
+        """Start the next song: the queue first, then (with Keep playing) a Smart shuffle pick. A song that
+        can't play is skipped with a note, up to 5 of them. Returns the play result, or None if nothing's left."""
+        tried, first_error = set(), None
+        for _attempt in range(5):
             nxt = self.queue.pop_next(self.library.exists)
             if not nxt and self.keep_playing():
-                nxt = self._keep_playing_pick(self.key)
-            if nxt:
-                try:
-                    self.play(nxt, countdown=0)
-                except ApiError as exc:
-                    EVENTS.send("notice", {"text": exc.message, "bad": True})
+                nxt = self._keep_playing_pick(current, tried)
+            if not nxt:
+                break
+            try:
+                return self.play(nxt, countdown=countdown)
+            except ApiError as exc:
+                tried.add(nxt)
+                first_error = first_error or exc
+                EVENTS.send("notice", {"text": f"Skipped “{Path(nxt).stem}”: {exc.message}", "bad": True})
+        if first_error:
+            raise first_error
+        return None
+
+    def _advance(self, finished_player, gen):
+        """Play the next song a moment after one finishes, unless something else happened meanwhile
+        (another song started, or Stop was pressed)."""
+        time.sleep(2.0)
+        with self.lock:
+            if self.player is not finished_player or self.gen != gen:
+                return
+            try:
+                self._play_next_from(self.key, countdown=0)
+            except ApiError:
+                pass                                    # each skipped song already got a note
 
     def _blocked(self):
         EVENTS.send("notice", {"text": "Windows blocked the key presses. If Roblox is running as administrator, "
@@ -1507,7 +1671,8 @@ class Playback:
             self.speed, self.cfg, self.app_cfg, self.seed, self.plan = cfg["speed"], cfg, app, seed, plan
             self.last_seeds[key] = seed
             self.player = player
-            self.counted = key == "__test__"
+            self.counted = self.forgiven = key == "__test__"
+            self.listened, self.last_pos, self.cur_total = 0.0, None, plan.duration
             start_plan_time = max(0.0, float(start_at)) / cfg["speed"]
 
             def run():
@@ -1559,6 +1724,7 @@ class Playback:
         return {"ok": True}
 
     def _stop_locked(self, wait):
+        self.gen += 1                       # a "next song" waiting to start is cancelled
         player, thread = self.player, self.thread
         if player and thread and thread.is_alive():
             player.request_stop()
@@ -1567,7 +1733,13 @@ class Playback:
 
     def stop(self, wait=False):
         with self.lock:
+            waiting_for_next = not self.active() and self.status.get("state") == "finished"
             self._stop_locked(wait)
+            if waiting_for_next and (self.status.get("next") or self.status.get("next_auto")):
+                # between songs (the next one was about to start): say it's stopped
+                self.status = {k: v for k, v in self.status.items() if k not in ("next", "next_auto")}
+                self.status["state"] = "stopped"
+                EVENTS.send("status", self.status)
         return {"ok": True}
 
     def active(self):
@@ -1595,19 +1767,13 @@ class Playback:
         with self.lock:
             active = self.active()
             current = self.key if active and self.key != "__test__" else None
-            nxt = self.queue.pop_next(self.library.exists)
-            if not nxt and self.keep_playing():
-                nxt = self._keep_playing_pick(current)
-            if not nxt:
+            skipped = current if current and not self.counted and self.heard_little() else None
+            result = self._play_next_from(current, 0 if active else countdown)
+            if result is None:
                 raise ApiError(400, "The queue is empty. Add songs to it first.")
-            if current and not self.counted:
-                total, pos = self.status.get("total") or 0, self.status.get("pos") or 0
-                if total and pos < 0.3 * total:
-                    try:
-                        self._bump_count("skips", current)     # skipped early: Smart shuffle plays it less
-                    except Exception:
-                        traceback.print_exc()
-            return self.play(nxt, countdown=0 if active else countdown)
+            if skipped:
+                self._count_later("skips", skipped, 1)      # skipped early: Smart shuffle plays it less
+            return result
 
     def settings_changed(self, key):
         """Apply new song settings to the song that's playing, without restarting."""
@@ -2068,8 +2234,21 @@ class AudioImport:
                     self._publish_jobs()
 
     def gpu_batch(self):
-        saved = self.settings.app("gpu_batch", 8)
-        return saved if isinstance(saved, int) and not isinstance(saved, bool) and 1 <= saved <= 32 else 8
+        saved = self.settings.app("gpu_batch", GPU_BATCH)
+        return saved if isinstance(saved, int) and not isinstance(saved, bool) and 1 <= saved <= GPU_BATCH else GPU_BATCH
+
+    def _learn_batch(self, used):
+        """After a graphics-card conversion: if it needed a smaller batch, start there next time; after 3
+        clean ones at a smaller size, try twice as big again (a one-off memory squeeze shouldn't last)."""
+        if not isinstance(used, int) or isinstance(used, bool) or used < 1:
+            return                                  # it ran on the CPU
+        asked = self.gpu_batch()
+        if used < asked:
+            self.settings.edit_app(lambda app: {"gpu_batch": used, "gpu_batch_ok": 0})
+        elif asked < GPU_BATCH:
+            ok = _count(self.settings.app("gpu_batch_ok")) + 1
+            self.settings.edit_app(lambda app: {"gpu_batch": min(GPU_BATCH, asked * 2), "gpu_batch_ok": 0} if ok >= 3
+                                   else {"gpu_batch_ok": ok})
 
     def _convert(self, job):
         if not model_ready() or not self.check_deps().get("ok"):
@@ -2107,9 +2286,8 @@ class AudioImport:
                         job["text"] = str(msg.get("text", ""))
                     elif msg["type"] == "done":
                         result = msg
-                    elif msg["type"] == "batch" and isinstance(msg.get("size"), int):
-                        # this graphics card needs smaller batches: start there next time instead of failing first
-                        self.settings.set_app("gpu_batch", max(1, min(self.gpu_batch(), msg["size"])))
+                    elif msg["type"] == "batch":
+                        pass                # a smaller batch is only remembered once a conversion succeeds with it
                     elif msg["type"] == "error":
                         error = str(msg.get("text", ""))
                 self._publish_jobs()
@@ -2136,6 +2314,7 @@ class AudioImport:
         shutil.move(str(part), str(output))
         key = output.relative_to(SONGS_DIR).as_posix()
         with self.lock:
+            self._learn_batch(result.get("batch"))
             timing = result.get("timing") if isinstance(result.get("timing"), dict) else {}
             log(f"Converted {job['title']}: {result.get('seconds')} s of audio in {result.get('took')} s on the "
                 f"{str(result.get('device', '?')).lower()}" + (f" (batch {result['batch']})" if result.get("batch") else "")
@@ -2701,24 +2880,33 @@ def api_playlists(h, query):
 
 def api_play_list(h, query):
     """Play a list of songs (all songs, favorites, a playlist, search results): in order, shuffled or with
-    Smart shuffle. The first one starts now and the rest go in the queue, replacing what was there."""
+    Smart shuffle. The first one starts now and the rest go in the queue, replacing what was there. A song
+    that can't play is skipped (up to 5)."""
     body = h._json_body()
     mode = body.get("mode") if body.get("mode") in ("order", "shuffle", "smart") else "order"
     keys = _keys(body.get("keys"))
-    all_keys = {m["key"] for m in APP.library.listing()["songs"] if not m.get("error")}
-    whole = bool(all_keys) and all_keys <= set(keys)
-    order, extras = build_play_order(keys, mode, APP.library, APP.settings, whole=whole)
+    mix = body.get("source") in ("playlist", "favorites")       # search results and all songs: nothing extra
+    order, extras = build_play_order(keys, mode, APP.library, APP.settings, mix=mix)
     if not order:
         raise ApiError(400, "There are no songs to play in this list.")
+    skipped, before, first_error = [], None, None
     with APP.playback.lock:                     # nothing else starts or changes the queue in between
-        before = APP.queue.replace(order[1:QUEUE_LIMIT + 1], [k for k in extras if k != order[0]])
-        try:
-            APP.playback.play(order[0])
-        except ApiError:
+        for i, first in enumerate(order[:5]):
+            rest = order[i + 1:i + 1 + QUEUE_LIMIT]
+            was = APP.queue.replace(rest, [k for k in extras if k in rest])
+            before = before or was
+            try:
+                APP.playback.play(first)
+                break
+            except ApiError as exc:
+                skipped.append(Path(first).stem)
+                first_error = first_error or exc
+        else:
             APP.queue.replace(before["items"], before["extras"])
-            raise
-    return {"playing": order[0], "items": APP.queue.items(), "extras": APP.queue.extras(),
-            "mixed_in": len(extras), "previous": before}
+            name = f"“{skipped[0]}”" if len(skipped) == 1 else "the first songs"
+            raise ApiError(400, f"Couldn't play {name}: {first_error.message}")
+    return {"playing": first, "items": APP.queue.items(), "extras": APP.queue.extras(), "total": len(order),
+            "mixed_in": len([k for k in extras if k in order]), "previous": before, "skipped": skipped}
 
 
 _BIN = None
@@ -2826,7 +3014,8 @@ def api_song_delete(h, query):
         APP.settings.forget_song(key)
         SETUP_NOTES.pop(key, None)
     EVENTS.send("library", {"sig": APP.library.sig})
-    EVENTS.send("queue", {"items": APP.queue.items()})
+    EVENTS.send("queue", queue_view(APP.settings))
+    EVENTS.send("playlists", {"items": playlists_view(APP.settings)})
     EVENTS.send("favorites", {"keys": APP.settings.app("favorites", []) or []})
     if where == "bin":
         return {"message": f"Deleted “{title}”. It's in the Recycle Bin if you want it back."}
